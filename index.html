@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2954/2954888.png">
     <title>CleanTrack System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -18,6 +23,20 @@
                 700: '#0369a1',
                 900: '#0c4a6e',
               }
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out',
+              'bounce-short': 'bounceShort 1s ease-in-out 1',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              bounceShort: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              }
             }
           }
         }
@@ -30,6 +49,20 @@
         .print-only { display: block !important; }
         body { background: white; -webkit-print-color-adjust: exact; }
       }
+      /* Custom scrollbar for analysis box */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1); 
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3); 
+        border-radius: 3px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5); 
+      }
     </style>
   <script type="importmap">
 {
@@ -40,10 +73,10 @@
     "@google/genai": "https://esm.sh/@google/genai@^1.32.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.559.0",
     "recharts": "https://esm.sh/recharts@^3.5.1",
-    "vite": "https://esm.sh/vite@^7.2.7",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8",
-    "react-qr-code": "https://esm.sh/react-qr-code@^2.0.18"
+    "react-qr-code": "https://esm.sh/react-qr-code@^2.0.18",
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>

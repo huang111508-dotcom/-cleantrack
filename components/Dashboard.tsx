@@ -9,7 +9,10 @@ import {
   BarChart3, 
   Sparkles, 
   RefreshCw,
-  Search
+  Search,
+  Users,
+  Edit,
+  Save
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
@@ -18,12 +21,15 @@ interface DashboardProps {
   logs: CleaningLog[];
   cleaners: Cleaner[];
   language: Language;
+  onUpdateCleaner: (updatedCleaner: Cleaner) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, language }) => {
+const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, language, onUpdateCleaner }) => {
   const [analysis, setAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
+  const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const t = TRANSLATIONS[language];
 
@@ -60,6 +66,14 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
     const result = await analyzeCleaningData(logs, locations, language);
     setAnalysis(result);
     setIsAnalyzing(false);
+  };
+
+  const handleSavePassword = (cleaner: Cleaner) => {
+    if (newPassword.trim()) {
+      onUpdateCleaner({ ...cleaner, password: newPassword });
+      setEditingCleaner(null);
+      setNewPassword('');
+    }
   };
 
   const filteredLocations = locationStats.filter(l => 
@@ -233,8 +247,53 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
           </div>
         </div>
 
-        {/* Right Column: AI Analysis & Recent Activity */}
+        {/* Right Column: Team Management & AI */}
         <div className="space-y-6">
+
+          {/* Team Management */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-brand-500" />
+              {t.teamManagement}
+            </h2>
+            <div className="space-y-3">
+              {cleaners.map(c => (
+                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <img src={c.avatar} className="w-8 h-8 rounded-full bg-white" alt={c.name} />
+                    <div className="text-sm">
+                      <p className="font-bold text-slate-700">{c.name}</p>
+                      <p className="text-xs text-slate-400">Pass: {editingCleaner === c.id ? '****' : c.password}</p>
+                    </div>
+                  </div>
+                  {editingCleaner === c.id ? (
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="text" 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="New Pass"
+                        className="w-24 text-xs p-1 border rounded"
+                      />
+                      <button 
+                        onClick={() => handleSavePassword(c)}
+                        className="p-1 text-green-600 hover:bg-green-100 rounded"
+                      >
+                        <Save size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => { setEditingCleaner(c.id); setNewPassword(c.password || ''); }}
+                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-white rounded transition-colors"
+                    >
+                      <Edit size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
           
           {/* AI Card */}
           <div className="bg-gradient-to-br from-indigo-900 to-brand-900 rounded-xl shadow-lg p-6 text-white overflow-hidden relative">
@@ -275,39 +334,6 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
                 {isAnalyzing ? 'Processing...' : t.runAnalysis}
               </button>
             </div>
-          </div>
-
-          {/* Recent Logs Feed */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-             <h3 className="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">{t.recentActivity}</h3>
-             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                {todaysLogs.slice(0, 8).map(log => {
-                  const cleaner = cleaners.find(c => c.id === log.cleanerId);
-                  const location = locations.find(l => l.id === log.locationId);
-                  const locName = language === 'zh' ? location?.nameZh : location?.nameEn;
-                  
-                  return (
-                    <div key={log.id} className="flex gap-3 items-start pb-3 border-b border-slate-50 last:border-0 last:pb-0">
-                      <img 
-                        src={cleaner?.avatar} 
-                        alt={cleaner?.name} 
-                        className="w-8 h-8 rounded-full border border-slate-200"
-                      />
-                      <div>
-                         <p className="text-sm font-medium text-slate-800">
-                           {cleaner?.name} <span className="text-slate-400 font-normal">{t.cleaned}</span>
-                         </p>
-                         <p className="text-xs text-brand-600 font-medium">
-                           {locName}
-                         </p>
-                         <p className="text-xs text-slate-400 mt-0.5">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                         </p>
-                      </div>
-                    </div>
-                  )
-                })}
-             </div>
           </div>
 
         </div>

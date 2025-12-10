@@ -1,38 +1,55 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Location, Cleaner, Language } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { Scan, CheckCircle2, MapPin, QrCode, Camera, XCircle } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { CheckCircle2, MapPin, Camera, XCircle, LogOut } from 'lucide-react';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface CleanerInterfaceProps {
   locations: Location[];
   currentCleaner: Cleaner;
   onLogCleaning: (locationId: string) => void;
   language: Language;
+  onLogout: () => void;
 }
 
 const CleanerInterface: React.FC<CleanerInterfaceProps> = ({ 
   locations, 
   currentCleaner, 
   onLogCleaning,
-  language
+  language,
+  onLogout
 }) => {
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [useRealCamera, setUseRealCamera] = useState(false);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerDivId = "reader-container";
 
   const t = TRANSLATIONS[language];
 
   // Effect to handle Real Camera Scanner lifecycle
   useEffect(() => {
+    let isMounted = true;
+
     if (useRealCamera && !selectedLocation) {
-      // Small timeout to ensure DOM element exists
-      const timer = setTimeout(() => {
+      // Small timeout to ensure DOM element exists and previous instances cleared
+      const initScanner = setTimeout(() => {
+        if (!isMounted) return;
+
+        // Cleanup existing if any
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(console.error);
+        }
+
         const scanner = new Html5QrcodeScanner(
-          "reader",
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          scannerDivId,
+          { 
+            fps: 10, 
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            showTorchButtonIfSupported: true,
+            formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+          },
           /* verbose= */ false
         );
         scannerRef.current = scanner;
@@ -57,37 +74,30 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
                if (loc) handleScanSuccess(loc);
              }
           },
-          (error) => {
-             // Ignore read errors, they happen every frame
+          (errorMessage) => {
+             // parse error, ignore
           }
         );
-      }, 100);
+      }, 300);
 
       return () => {
-        clearTimeout(timer);
+        isMounted = false;
+        clearTimeout(initScanner);
         if (scannerRef.current) {
-          scannerRef.current.clear().catch(console.error);
+          scannerRef.current.clear().catch(err => console.warn("Scanner clear error", err));
+          scannerRef.current = null;
         }
       };
     }
-  }, [useRealCamera, selectedLocation]);
+  }, [useRealCamera, selectedLocation, locations]);
 
   const handleScanSuccess = (loc: Location) => {
     if (scannerRef.current) {
       scannerRef.current.clear().catch(console.error);
+      scannerRef.current = null;
     }
     setUseRealCamera(false);
     setSelectedLocation(loc);
-  };
-
-  // Simulating the "Scan" action
-  const handleScanSimulation = (location: Location) => {
-    setIsScanning(true);
-    // Simulate delay of camera opening/processing
-    setTimeout(() => {
-      setSelectedLocation(location);
-      setIsScanning(false);
-    }, 800);
   };
 
   const handleConfirmClean = () => {
@@ -99,6 +109,10 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
       setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
+
+  const handleStopCamera = () => {
+    setUseRealCamera(false);
+  }
 
   if (selectedLocation) {
     const locName = language === 'zh' ? selectedLocation.nameZh : selectedLocation.nameEn;
@@ -138,18 +152,26 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
   }
 
   return (
-    <div className="max-w-md mx-auto animate-fade-in pb-20">
+    <div className="max-w-md mx-auto animate-fade-in pb-20 pt-4">
       {/* Header Profile */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4 mb-6">
-        <img 
-          src={currentCleaner.avatar} 
-          alt={currentCleaner.name} 
-          className="w-12 h-12 rounded-full border-2 border-brand-100"
-        />
-        <div>
-          <p className="text-xs text-slate-400 font-medium">{t.loggedInAs}</p>
-          <h2 className="text-lg font-bold text-slate-800">{currentCleaner.name}</h2>
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <img 
+            src={currentCleaner.avatar} 
+            alt={currentCleaner.name} 
+            className="w-12 h-12 rounded-full border-2 border-brand-100"
+          />
+          <div>
+            <p className="text-xs text-slate-400 font-medium">{t.loggedInAs}</p>
+            <h2 className="text-lg font-bold text-slate-800">{currentCleaner.name}</h2>
+          </div>
         </div>
+        <button 
+          onClick={onLogout}
+          className="p-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
 
       {successMsg && (
@@ -162,67 +184,37 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
       {/* Real Scanner Toggle */}
       <div className="mb-6">
         {!useRealCamera ? (
-          <button 
-            onClick={() => setUseRealCamera(true)}
-            className="w-full bg-slate-900 text-white py-4 rounded-xl shadow-lg flex items-center justify-center gap-3 hover:bg-slate-800 transition-all"
-          >
-            <Camera size={24} />
-            <span className="font-bold text-lg">{t.realScan}</span>
-          </button>
+          <div className="space-y-4">
+            <button 
+              onClick={() => setUseRealCamera(true)}
+              className="w-full bg-slate-900 text-white py-12 rounded-3xl shadow-xl flex flex-col items-center justify-center gap-4 hover:bg-slate-800 transition-all group"
+            >
+              <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Camera size={40} className="text-brand-400" />
+              </div>
+              <div className="text-center">
+                <span className="block font-bold text-2xl">{t.realScan}</span>
+                <span className="text-slate-400 text-sm mt-1">{t.scanInstruction}</span>
+              </div>
+            </button>
+          </div>
         ) : (
-           <div className="bg-black rounded-xl overflow-hidden p-2 relative">
-             <div id="reader" className="w-full bg-black"></div>
+           <div className="bg-black rounded-3xl overflow-hidden p-2 relative shadow-2xl">
+             {/* The container for html5-qrcode */}
+             <div id={scannerDivId} className="w-full bg-black min-h-[300px] text-white"></div>
+             
              <button 
-               onClick={() => setUseRealCamera(false)}
-               className="absolute top-4 right-4 bg-white/20 backdrop-blur text-white p-2 rounded-full hover:bg-white/40 z-10"
+               onClick={handleStopCamera}
+               className="absolute top-4 right-4 bg-white/20 backdrop-blur text-white p-3 rounded-full hover:bg-white/40 z-20"
              >
-               <XCircle size={24} />
+               <XCircle size={28} />
              </button>
-             <p className="text-center text-white/70 text-xs py-2">Point camera at QR code</p>
            </div>
         )}
       </div>
 
-      <div className="relative flex py-2 items-center">
-          <div className="flex-grow border-t border-slate-200"></div>
-          <span className="flex-shrink-0 mx-4 text-slate-400 text-xs uppercase">OR Simulate</span>
-          <div className="flex-grow border-t border-slate-200"></div>
-      </div>
-
-      {/* Simulator Instructions */}
-      <div className="mt-6">
-        <h3 className="text-slate-800 font-bold mb-3 flex items-center gap-2">
-          <QrCode className="text-brand-500" size={20}/>
-          {t.tapToScan}
-        </h3>
-        <p className="text-sm text-slate-500 mb-4">
-          {t.scanInstruction}
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          {locations.map(loc => (
-            <button
-              key={loc.id}
-              onClick={() => handleScanSimulation(loc)}
-              disabled={isScanning}
-              className="p-4 bg-white border border-slate-200 rounded-xl hover:border-brand-400 hover:shadow-md transition-all text-left group relative overflow-hidden"
-            >
-              {isScanning && (
-                <div className="absolute inset-0 bg-slate-900/10 flex items-center justify-center backdrop-blur-[1px]">
-                  <Scan className="animate-pulse text-brand-600" />
-                </div>
-              )}
-              <div className="flex justify-between items-start mb-2">
-                 <span className="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded">
-                   {loc.zone}
-                 </span>
-              </div>
-              <h4 className="font-bold text-slate-700 group-hover:text-brand-700 transition-colors">
-                {language === 'zh' ? loc.nameZh : loc.nameEn}
-              </h4>
-            </button>
-          ))}
-        </div>
+      <div className="text-center text-slate-400 text-xs mt-8 px-8">
+        {t.scanFooter}
       </div>
     </div>
   );

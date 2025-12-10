@@ -1,9 +1,12 @@
 export type Language = 'en' | 'zh';
 
+export type UserRole = 'manager' | 'cleaner' | null;
+
 export interface Cleaner {
   id: string;
   name: string;
   avatar: string;
+  password?: string; // Added password field
 }
 
 export interface Location {
