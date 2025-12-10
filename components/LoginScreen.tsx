@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Cleaner, Language, UserRole } from '../types';
 import { TRANSLATIONS, DEFAULT_MANAGER_PASSWORD } from '../constants';
-import { ShieldCheck, User, Lock, LogIn, Cloud, Settings } from 'lucide-react';
+import { ShieldCheck, User, Lock, LogIn, Cloud, Settings, Database } from 'lucide-react';
 import CloudSetup from './CloudSetup';
 
 interface LoginScreenProps {
@@ -46,6 +46,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 animate-fade-in relative">
       
+      {/* Top Left Floating Button (Backup) */}
+      <div className="absolute top-4 left-4 z-30">
+        <button 
+           onClick={() => setShowCloudSetup(true)}
+           className="p-3 bg-white rounded-full shadow-md text-brand-600 hover:scale-110 transition-transform flex items-center gap-2 font-bold text-xs"
+        >
+          <Database size={18} />
+          <span className="hidden sm:inline">{language === 'zh' ? '云端设置' : 'Cloud'}</span>
+        </button>
+      </div>
+
       <CloudSetup 
         isOpen={showCloudSetup} 
         onClose={() => setShowCloudSetup(false)} 
@@ -131,29 +142,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
             </div>
           )}
 
-          <button
-            type="submit"
-            className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-brand-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            <LogIn size={20} />
-            {t.login}
-          </button>
-        </form>
-      </div>
+          <div className="space-y-4">
+            <button
+              type="submit"
+              className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-brand-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <LogIn size={20} />
+              {t.login}
+            </button>
 
-      {/* Cloud Sync Button - Moved to Bottom Center */}
-      <div className="mt-8 text-center z-10">
-         <button 
-           onClick={() => setShowCloudSetup(true)}
-           className="group flex flex-col items-center gap-2 text-slate-400 hover:text-brand-600 transition-colors"
-         >
-           <div className="p-3 bg-white rounded-full shadow-sm border border-slate-200 group-hover:border-brand-300 group-hover:scale-110 transition-all">
-             <Cloud size={20} />
-           </div>
-           <span className="text-sm font-medium underline decoration-dashed underline-offset-4 decoration-slate-300 group-hover:decoration-brand-300">
-             {language === 'zh' ? '配置云端同步 (多设备)' : 'Configure Cloud Sync'}
-           </span>
-         </button>
+            {/* Cloud Setup Button INSIDE the card - Cannot miss this */}
+            <button 
+              type="button"
+              onClick={() => setShowCloudSetup(true)}
+              className="w-full py-2 text-slate-400 text-xs font-medium flex items-center justify-center gap-1.5 hover:text-brand-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100"
+            >
+              <Cloud size={14} />
+              {language === 'zh' ? '配置云端同步数据库 (多设备)' : 'Configure Cloud Sync Database'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
