@@ -107,6 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Card 1: Compliance */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between">
             <div>
@@ -125,6 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
+        {/* Card 2: Issues */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between">
             <div>
@@ -142,6 +144,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
         </div>
 
+        {/* Card 3: Total Progress */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between">
             <div>
@@ -164,22 +167,27 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
         </div>
 
-        {/* STATUS CARD (Display Only) */}
-         <div className="bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-700">
-           <div className="flex items-center justify-between text-white">
+        {/* Card 4: System Status (Updated visual style to White Theme) */}
+         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-300 font-medium">System</p>
-              <h3 className="text-lg font-bold">
-                 {language === 'zh' ? '云端已连接' : 'Cloud Active'}
+              <p className="text-sm text-slate-500 font-medium">
+                {language === 'zh' ? '系统状态' : 'System Status'}
+              </p>
+              <h3 className="text-2xl font-bold text-green-600 flex items-center gap-2">
+                 {language === 'zh' ? '在线' : 'Online'}
+                 <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </span>
               </h3>
             </div>
-            <div className="p-3 rounded-full bg-green-500 text-white">
+            <div className="p-3 rounded-full bg-green-50 text-green-600">
                <Cloud size={24} />
             </div>
           </div>
-           <p className="text-xs text-slate-400 mt-4 flex items-center gap-1">
-             <div className="w-2 h-2 rounded-full bg-green-400"></div>
-             {language === 'zh' ? '数据实时同步中' : 'Data Syncing'}
+           <p className="text-xs text-slate-400 mt-2">
+             {language === 'zh' ? '云端数据实时同步中' : 'Data syncing with cloud'}
            </p>
         </div>
       </div>
