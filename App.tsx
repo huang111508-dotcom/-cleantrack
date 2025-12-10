@@ -5,64 +5,107 @@ import Dashboard from './components/Dashboard';
 import CleanerInterface from './components/CleanerInterface';
 import QRCodeGenerator from './components/QRCodeGenerator';
 import LoginScreen from './components/LoginScreen';
-import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2 } from 'lucide-react';
+import CloudSetup from './components/CloudSetup';
+import { 
+  initFirebase, 
+  subscribeToLogs, 
+  subscribeToCleaners, 
+  addCleaningLog, 
+  updateCleaner,
+  seedCleanersIfEmpty,
+  clearAllLogs
+} from './services/firebase';
+import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, CloudOff } from 'lucide-react';
 
 const App: React.FC = () => {
   // Application State
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
-  const [cleanersList, setCleanersList] = useState<Cleaner[]>(CLEANERS);
+  const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
   
   const [view, setView] = useState<ViewState>('dashboard');
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [language, setLanguage] = useState<Language>('zh'); 
+  const [showCloudSetup, setShowCloudSetup] = useState(false);
+
+  // Cloud Mode State
+  const [isCloudMode, setIsCloudMode] = useState(false);
+  const [isCloudConnected, setIsCloudConnected] = useState(false);
 
   const t = TRANSLATIONS[language];
 
-  // Initialize Data
+  // 1. Initialize System (Check for Cloud Config or Load Local)
   useEffect(() => {
-    // 1. Logs
-    const savedLogs = localStorage.getItem('cleaningLogs');
-    if (savedLogs) {
-      setLogs(JSON.parse(savedLogs));
-    } else {
-      // For first time load, we still generate some dummy data so the user sees something.
-      // But "Reset" will clear it.
-      const initial = generateInitialLogs();
-      setLogs(initial);
-      localStorage.setItem('cleaningLogs', JSON.stringify(initial));
-    }
+    const cloudInit = initFirebase();
+    setIsCloudMode(cloudInit);
+    setIsCloudConnected(cloudInit);
 
-    // 2. Cleaners (with passwords)
-    const savedCleaners = localStorage.getItem('cleanersData');
-    if (savedCleaners) {
-      setCleanersList(JSON.parse(savedCleaners));
+    if (cloudInit) {
+      // --- CLOUD MODE INITIALIZATION ---
+      
+      // Seed cleaners if new DB
+      seedCleanersIfEmpty(CLEANERS);
+
+      // Subscribe to Logs
+      const unsubLogs = subscribeToLogs((newLogs) => {
+        setLogs(newLogs);
+      });
+
+      // Subscribe to Cleaners
+      const unsubCleaners = subscribeToCleaners((newCleaners) => {
+        setCleanersList(newCleaners);
+      });
+
+      return () => {
+        unsubLogs();
+        unsubCleaners();
+      };
     } else {
-      // Use defaults
-      setCleanersList(CLEANERS);
+      // --- LOCAL MODE INITIALIZATION ---
+      
+      // Load Cleaners
+      const savedCleaners = localStorage.getItem('cleanersData');
+      if (savedCleaners) {
+        setCleanersList(JSON.parse(savedCleaners));
+      } else {
+        setCleanersList(CLEANERS);
+      }
+
+      // Load Logs
+      const savedLogs = localStorage.getItem('cleaningLogs');
+      if (savedLogs) {
+        setLogs(JSON.parse(savedLogs));
+      } else {
+        const initial = generateInitialLogs();
+        setLogs(initial);
+        localStorage.setItem('cleaningLogs', JSON.stringify(initial));
+      }
+
+      // LocalStorage Listener for cross-tab sync in Local Mode
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'cleaningLogs' && e.newValue) setLogs(JSON.parse(e.newValue));
+        if (e.key === 'cleanersData' && e.newValue) setCleanersList(JSON.parse(e.newValue));
+      };
+      window.addEventListener('storage', handleStorageChange);
+      return () => window.removeEventListener('storage', handleStorageChange);
     }
   }, []);
 
-  // Save logs on change
+  // 2. Persist Local Data (Only in Local Mode)
   useEffect(() => {
-    if (logs.length > 0) {
-      localStorage.setItem('cleaningLogs', JSON.stringify(logs));
-    } else {
-      // If logs are empty array (after reset), we should still save that state
-      // check if it was initialized to avoid wiping on first render before useEffect runs
-      if (localStorage.getItem('cleaningLogs')) { 
-        localStorage.setItem('cleaningLogs', JSON.stringify([]));
-      }
-    }
-  }, [logs]);
-
-  // Save cleaners on change (password updates)
-  useEffect(() => {
-    if (cleanersList.length > 0) {
+    if (!isCloudMode && cleanersList.length > 0) {
       localStorage.setItem('cleanersData', JSON.stringify(cleanersList));
     }
-  }, [cleanersList]);
+  }, [cleanersList, isCloudMode]);
 
+  useEffect(() => {
+    if (!isCloudMode) {
+      localStorage.setItem('cleaningLogs', JSON.stringify(logs));
+    }
+  }, [logs, isCloudMode]);
+
+
+  // Actions
   const handleLogin = (role: UserRole, cleaner?: Cleaner) => {
     setCurrentUserRole(role);
     if (role === 'cleaner' && cleaner) {
@@ -76,74 +119,79 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUserRole(null);
     setCurrentCleaner(undefined);
-    setView('dashboard'); // Reset view for next login but essentially shows login screen
+    setView('dashboard'); 
   };
 
-  const handleUpdateCleaner = (updatedCleaner: Cleaner) => {
-    setCleanersList(prev => prev.map(c => c.id === updatedCleaner.id ? updatedCleaner : c));
+  const handleUpdateCleaner = async (updatedCleaner: Cleaner) => {
+    if (isCloudMode) {
+      await updateCleaner(updatedCleaner);
+    } else {
+      setCleanersList(prev => prev.map(c => c.id === updatedCleaner.id ? updatedCleaner : c));
+    }
   };
 
-  const handleLogCleaning = (locationId: string) => {
+  const handleLogCleaning = async (locationId: string) => {
     if (!currentCleaner) return;
 
     const newLog: CleaningLog = {
-      id: `log-${Date.now()}`,
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       locationId,
       cleanerId: currentCleaner.id,
       timestamp: Date.now(),
       status: 'completed'
     };
     
-    // Prepend to logs (newest first)
-    setLogs(prev => [newLog, ...prev]);
+    if (isCloudMode) {
+      await addCleaningLog(newLog);
+    } else {
+      setLogs(prev => [newLog, ...prev]);
+    }
   };
 
-  const handleResetData = () => {
+  const handleResetData = async () => {
     if(confirm(t.resetConfirm)) {
-      setLogs([]);
-      localStorage.setItem('cleaningLogs', JSON.stringify([]));
+      if (isCloudMode) {
+        await clearAllLogs();
+      } else {
+        setLogs([]);
+      }
     }
   }
 
+  const handleRefreshData = () => {
+    // Only needed for local mode to force reload from storage if events failed
+    if (!isCloudMode) {
+       const savedLogs = localStorage.getItem('cleaningLogs');
+       if (savedLogs) setLogs(JSON.parse(savedLogs));
+    }
+  };
+
   const handleExportData = () => {
-    // 1. Prepare CSV Content
-    // Add BOM for UTF-8 compatibility in Excel
     let csvContent = "\uFEFF"; 
-    
-    // Headers
     const headers = language === 'zh' 
       ? "日期,时间,点位名称,区域,保洁员,状态\n"
       : "Date,Time,Location,Zone,Cleaner,Status\n";
-    
     csvContent += headers;
 
-    // Rows
     logs.forEach(log => {
       const dateObj = new Date(log.timestamp);
-      const dateStr = dateObj.toLocaleDateString();
-      const timeStr = dateObj.toLocaleTimeString();
-      
       const loc = LOCATIONS.find(l => l.id === log.locationId);
       const locName = loc ? (language === 'zh' ? loc.nameZh : loc.nameEn) : 'Unknown';
       const zone = loc ? loc.zone : 'Unknown';
-      
       const cleaner = cleanersList.find(c => c.id === log.cleanerId);
       const cleanerName = cleaner ? cleaner.name : 'Unknown';
       
-      // Escape commas in names just in case
       const row = [
-        dateStr,
-        timeStr,
+        dateObj.toLocaleDateString(),
+        dateObj.toLocaleTimeString(),
         `"${locName}"`,
         `"${zone}"`,
         `"${cleanerName}"`,
         log.status
       ].join(",");
-      
       csvContent += row + "\n";
     });
 
-    // 2. Trigger Download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -158,7 +206,7 @@ const App: React.FC = () => {
     setLanguage(prev => prev === 'en' ? 'zh' : 'en');
   }
 
-  // If not logged in, show Login Screen
+  // Render
   if (!currentUserRole) {
     return (
       <>
@@ -172,10 +220,21 @@ const App: React.FC = () => {
             </button>
         </div>
         <LoginScreen 
-          cleaners={cleanersList} 
+          cleaners={cleanersList.length > 0 ? cleanersList : CLEANERS} // Fallback to constant if init hasn't finished
           onLogin={handleLogin} 
           language={language} 
         />
+        <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center gap-2 text-xs text-slate-400">
+           {isCloudMode ? (
+             <span className="flex items-center gap-1 text-green-600 font-medium">
+               <Cloud size={12} /> {language === 'zh' ? '云端同步已开启' : 'Cloud Sync Active'}
+             </span>
+           ) : (
+             <span className="flex items-center gap-1">
+               <CloudOff size={12} /> {language === 'zh' ? '本地演示模式 (无跨设备同步)' : 'Local Demo Mode (No Sync)'}
+             </span>
+           )}
+        </div>
       </>
     );
   }
@@ -183,7 +242,12 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
-      {/* Navigation Header - ONLY for Manager */}
+      <CloudSetup 
+        isOpen={showCloudSetup} 
+        onClose={() => setShowCloudSetup(false)} 
+        language={language} 
+      />
+
       {currentUserRole === 'manager' && (
         <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -200,11 +264,20 @@ const App: React.FC = () => {
 
               <div className="flex items-center gap-2 sm:gap-4">
                 <button 
-                  onClick={toggleLanguage}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors"
+                  onClick={() => setShowCloudSetup(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    isCloudMode 
+                    ? 'bg-green-50 text-green-700 border border-green-200' 
+                    : 'bg-slate-50 text-slate-500 border border-slate-200'
+                  }`}
+                  title="Setup Cloud Sync"
                 >
-                  <Globe size={16} />
-                  <span>{language === 'en' ? '中文' : 'En'}</span>
+                  {isCloudMode ? <Cloud size={16} /> : <CloudOff size={16} />}
+                  <span className="hidden sm:inline">
+                    {isCloudMode 
+                      ? (language === 'zh' ? '已同步' : 'Synced') 
+                      : (language === 'zh' ? '配置云端' : 'Setup Sync')}
+                  </span>
                 </button>
 
                 <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
@@ -266,10 +339,8 @@ const App: React.FC = () => {
         </nav>
       )}
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Manager Views */}
         {currentUserRole === 'manager' && view === 'dashboard' && (
           <Dashboard 
             locations={LOCATIONS} 
@@ -277,6 +348,7 @@ const App: React.FC = () => {
             cleaners={cleanersList}
             onUpdateCleaner={handleUpdateCleaner}
             language={language}
+            onRefresh={handleRefreshData}
           />
         )}
         
@@ -287,7 +359,6 @@ const App: React.FC = () => {
           />
         )}
 
-        {/* Cleaner View - Locked */}
         {currentUserRole === 'cleaner' && currentCleaner && (
           <CleanerInterface 
             locations={LOCATIONS}

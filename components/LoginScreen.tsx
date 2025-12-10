@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Cleaner, Language, UserRole } from '../types';
 import { TRANSLATIONS, DEFAULT_MANAGER_PASSWORD } from '../constants';
-import { ShieldCheck, User, Lock, LogIn } from 'lucide-react';
+import { ShieldCheck, User, Lock, LogIn, Settings } from 'lucide-react';
+import CloudSetup from './CloudSetup';
 
 interface LoginScreenProps {
   cleaners: Cleaner[];
@@ -14,6 +15,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   const [selectedCleanerId, setSelectedCleanerId] = useState<string>('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showCloudSetup, setShowCloudSetup] = useState(false);
 
   const t = TRANSLATIONS[language];
 
@@ -42,7 +44,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 animate-fade-in">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 animate-fade-in relative">
+      <div className="absolute top-4 left-4 z-40">
+         <button 
+           onClick={() => setShowCloudSetup(true)}
+           className="p-2 text-slate-400 hover:text-brand-600 hover:bg-white rounded-full transition-all"
+           title={language === 'zh' ? '多设备同步设置' : 'Sync Settings'}
+         >
+           <Settings size={20} />
+         </button>
+      </div>
+
+      <CloudSetup 
+        isOpen={showCloudSetup} 
+        onClose={() => setShowCloudSetup(false)} 
+        language={language} 
+      />
+
       <div className="mb-8 text-center">
         <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl">
           CT

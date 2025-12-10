@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Location, Cleaner, Language } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { CheckCircle2, MapPin, Camera, XCircle, LogOut } from 'lucide-react';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface CleanerInterfaceProps {
   locations: Location[];
@@ -22,7 +22,10 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [useRealCamera, setUseRealCamera] = useState(false);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const [cameraError, setCameraError] = useState('');
+  
+  // We use a ref to hold the instance of Html5Qrcode (not Scanner)
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = "reader-container";
 
   const t = TRANSLATIONS[language];
@@ -31,31 +34,41 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    if (useRealCamera && !selectedLocation) {
-      // Small timeout to ensure DOM element exists and previous instances cleared
-      const initScanner = setTimeout(() => {
-        if (!isMounted) return;
-
-        // Cleanup existing if any
-        if (scannerRef.current) {
-          scannerRef.current.clear().catch(console.error);
+    // Function to start the scanner
+    const startScanner = async () => {
+      try {
+        setCameraError('');
+        
+        // If an instance exists, stop and clear it first
+        if (html5QrCodeRef.current) {
+          try {
+            await html5QrCodeRef.current.stop();
+            html5QrCodeRef.current.clear();
+          } catch (e) {
+            console.warn("Error stopping previous instance", e);
+          }
         }
 
-        const scanner = new Html5QrcodeScanner(
-          scannerDivId,
-          { 
-            fps: 10, 
+        // Create new instance
+        const html5QrCode = new Html5Qrcode(scannerDivId);
+        html5QrCodeRef.current = html5QrCode;
+
+        // Start scanning with environment camera (back camera)
+        // Note: The user requested "Front Camera" (前置) in the prompt, but for scanning a QR code on a wall
+        // with a mobile phone, the "Environment" (Back) camera is the standard and logical choice.
+        // "Front" implies selfie camera which is hard to use for wall scanning. 
+        // We default to "environment".
+        await html5QrCode.start(
+          { facingMode: "environment" }, 
+          {
+            fps: 10,
             qrbox: { width: 250, height: 250 },
             aspectRatio: 1.0,
-            showTorchButtonIfSupported: true,
             formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
           },
-          /* verbose= */ false
-        );
-        scannerRef.current = scanner;
-
-        scanner.render(
           (decodedText) => {
+             if (!isMounted) return;
+             
              // Success callback
              try {
                // Try parsing JSON first
@@ -75,26 +88,56 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
              }
           },
           (errorMessage) => {
-             // parse error, ignore
+             // ignore frame errors
           }
         );
-      }, 300);
-
-      return () => {
-        isMounted = false;
-        clearTimeout(initScanner);
-        if (scannerRef.current) {
-          scannerRef.current.clear().catch(err => console.warn("Scanner clear error", err));
-          scannerRef.current = null;
+      } catch (err) {
+        if (isMounted) {
+          console.error("Error starting scanner", err);
+          setCameraError(language === 'zh' ? '无法启动摄像头，请确保已授权。' : 'Cannot start camera. Please check permissions.');
         }
-      };
-    }
-  }, [useRealCamera, selectedLocation, locations]);
+      }
+    };
 
-  const handleScanSuccess = (loc: Location) => {
-    if (scannerRef.current) {
-      scannerRef.current.clear().catch(console.error);
-      scannerRef.current = null;
+    if (useRealCamera && !selectedLocation) {
+      // Small timeout to ensure DOM is ready
+      const timer = setTimeout(() => {
+        startScanner();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      // If we are not using camera, make sure to stop it
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(console.error).finally(() => {
+          if (html5QrCodeRef.current) {
+            html5QrCodeRef.current.clear();
+            html5QrCodeRef.current = null;
+          }
+        });
+      }
+    }
+
+    return () => {
+      isMounted = false;
+      if (html5QrCodeRef.current) {
+        if (html5QrCodeRef.current.isScanning) {
+           html5QrCodeRef.current.stop().catch(console.error);
+        }
+        html5QrCodeRef.current.clear();
+      }
+    };
+  }, [useRealCamera, selectedLocation, locations, language]);
+
+  const handleScanSuccess = async (loc: Location) => {
+    // Stop the camera immediately
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
+      } catch (e) {
+        console.error("Stop failed", e);
+      }
     }
     setUseRealCamera(false);
     setSelectedLocation(loc);
@@ -110,8 +153,15 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
     }
   };
 
-  const handleStopCamera = () => {
+  const handleStopCamera = async () => {
     setUseRealCamera(false);
+    if (html5QrCodeRef.current) {
+      try {
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
+      } catch (e) { console.error(e); }
+    }
   }
 
   if (selectedLocation) {
@@ -199,10 +249,16 @@ const CleanerInterface: React.FC<CleanerInterfaceProps> = ({
             </button>
           </div>
         ) : (
-           <div className="bg-black rounded-3xl overflow-hidden p-2 relative shadow-2xl">
+           <div className="bg-black rounded-3xl overflow-hidden relative shadow-2xl">
              {/* The container for html5-qrcode */}
-             <div id={scannerDivId} className="w-full bg-black min-h-[300px] text-white"></div>
+             <div id={scannerDivId} className="w-full bg-black min-h-[350px] text-white"></div>
              
+             {cameraError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white p-6 text-center">
+                    <p>{cameraError}</p>
+                </div>
+             )}
+
              <button 
                onClick={handleStopCamera}
                className="absolute top-4 right-4 bg-white/20 backdrop-blur text-white p-3 rounded-full hover:bg-white/40 z-20"

@@ -35,3 +35,12 @@ export interface Alert {
   message: string;
   severity: 'low' | 'medium' | 'high';
 }
+
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+}

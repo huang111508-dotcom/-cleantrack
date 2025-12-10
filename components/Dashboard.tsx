@@ -12,7 +12,8 @@ import {
   Search,
   Users,
   Edit,
-  Save
+  Save,
+  RotateCw
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
@@ -22,9 +23,10 @@ interface DashboardProps {
   cleaners: Cleaner[];
   language: Language;
   onUpdateCleaner: (updatedCleaner: Cleaner) => void;
+  onRefresh: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, language, onUpdateCleaner }) => {
+const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, language, onUpdateCleaner, onRefresh }) => {
   const [analysis, setAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -88,7 +90,17 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
   const COLORS = ['#0ea5e9', '#e2e8f0'];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
+      <div className="flex justify-end lg:hidden">
+         <button 
+           onClick={onRefresh}
+           className="flex items-center gap-1 text-sm text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full font-medium"
+         >
+           <RotateCw size={14} />
+           {language === 'zh' ? '刷新数据' : 'Refresh'}
+         </button>
+      </div>
+
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -176,15 +188,24 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
               <BarChart3 className="w-5 h-5 text-brand-500" />
               {t.liveStatus}
             </h2>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder={t.search}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-              />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input 
+                  type="text"
+                  placeholder={t.search}
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                />
+              </div>
+              <button 
+                onClick={onRefresh}
+                className="hidden sm:flex p-2 text-slate-400 hover:text-brand-600 bg-slate-50 hover:bg-brand-50 rounded-lg transition-colors"
+                title={language === 'zh' ? '刷新数据' : 'Refresh Data'}
+              >
+                <RotateCw size={18} />
+              </button>
             </div>
           </div>
           
@@ -337,6 +358,10 @@ const Dashboard: React.FC<DashboardProps> = ({ locations, logs, cleaners, langua
           </div>
 
         </div>
+      </div>
+      
+      <div className="text-center text-xs text-slate-400 pt-8 pb-4">
+         {language === 'zh' ? '数据仅存储在当前浏览器中（非云端同步）' : 'Data stored locally in browser (Not cloud synced)'}
       </div>
     </div>
   );
