@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Cleaner, Language, UserRole } from '../types';
 import { TRANSLATIONS, DEFAULT_MANAGER_PASSWORD } from '../constants';
 import { ShieldCheck, User, Lock, LogIn, Cloud, Settings, Database } from 'lucide-react';
@@ -18,6 +18,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   const [showCloudSetup, setShowCloudSetup] = useState(false);
 
   const t = TRANSLATIONS[language];
+
+  // Auto-open if URL has #setup hash
+  useEffect(() => {
+    if (window.location.hash === '#setup') {
+      setShowCloudSetup(true);
+    }
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,11 +70,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
         language={language} 
       />
 
-      <div className="mb-8 text-center">
-        <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl">
+      <div className="mb-8 text-center group">
+        {/* ALTERNATIVE METHOD 1: Click the Logo */}
+        <button 
+          onClick={() => setShowCloudSetup(true)}
+          className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl hover:bg-brand-700 hover:scale-105 transition-all cursor-pointer"
+          title={language === 'zh' ? '点击配置云端' : 'Click to Setup Cloud'}
+        >
           CT
-        </div>
-        <h1 className="text-3xl font-bold text-slate-800">{t.appTitle}</h1>
+        </button>
+        
+        {/* ALTERNATIVE METHOD 2: Click the Title */}
+        <h1 
+          onClick={() => setShowCloudSetup(true)}
+          className="text-3xl font-bold text-slate-800 cursor-pointer hover:text-brand-600 transition-colors select-none"
+        >
+          {t.appTitle}
+        </h1>
         <p className="text-slate-500 mt-2">{t.loginTitle}</p>
       </div>
 
@@ -162,6 +181,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
             </button>
           </div>
         </form>
+      </div>
+
+      {/* ALTERNATIVE METHOD 3: Footer Link */}
+      <div className="absolute bottom-4 left-0 right-0 text-center z-20">
+         <button 
+           onClick={() => setShowCloudSetup(true)}
+           className="text-slate-300 hover:text-brand-600 text-xs underline decoration-dotted transition-colors"
+         >
+           [ ☁️ Cloud Config / 云端设置 ]
+         </button>
       </div>
     </div>
   );
