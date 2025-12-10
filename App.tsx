@@ -5,7 +5,6 @@ import Dashboard from './components/Dashboard';
 import CleanerInterface from './components/CleanerInterface';
 import QRCodeGenerator from './components/QRCodeGenerator';
 import LoginScreen from './components/LoginScreen';
-import CloudSetup from './components/CloudSetup';
 import { 
   initFirebase, 
   subscribeToLogs, 
@@ -15,7 +14,7 @@ import {
   seedCleanersIfEmpty,
   clearAllLogs
 } from './services/firebase';
-import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, CloudOff, ServerCog } from 'lucide-react';
+import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud } from 'lucide-react';
 
 const App: React.FC = () => {
   // Application State
@@ -26,72 +25,44 @@ const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('dashboard');
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [language, setLanguage] = useState<Language>('zh'); 
-  const [showCloudSetup, setShowCloudSetup] = useState(false);
 
-  // Cloud Mode State
-  const [isCloudMode, setIsCloudMode] = useState(false);
-  const [isCloudConnected, setIsCloudConnected] = useState(false);
+  // Cloud Mode State (Default to true as we hardcoded config)
+  const [isCloudMode, setIsCloudMode] = useState(true);
 
   const t = TRANSLATIONS[language];
 
-  // 1. Initialize System (Check for Cloud Config or Load Local)
+  // 1. Initialize System
   useEffect(() => {
+    // Attempt to initialize with hardcoded config
     const cloudInit = initFirebase();
     setIsCloudMode(cloudInit);
-    setIsCloudConnected(cloudInit);
 
     if (cloudInit) {
-      // --- CLOUD MODE INITIALIZATION ---
-      
-      // Seed cleaners if new DB
+      // Seed default data if DB is new
       seedCleanersIfEmpty(CLEANERS);
-
-      // Subscribe to Logs
-      const unsubLogs = subscribeToLogs((newLogs) => {
-        setLogs(newLogs);
-      });
-
-      // Subscribe to Cleaners
-      const unsubCleaners = subscribeToCleaners((newCleaners) => {
-        setCleanersList(newCleaners);
-      });
-
-      return () => {
-        unsubLogs();
-        unsubCleaners();
-      };
-    } else {
-      // --- LOCAL MODE INITIALIZATION ---
       
-      // Load Cleaners
+      // Subscribe to real-time updates
+      const unsubLogs = subscribeToLogs((newLogs) => setLogs(newLogs));
+      const unsubCleaners = subscribeToCleaners((newCleaners) => setCleanersList(newCleaners));
+      return () => { unsubLogs(); unsubCleaners(); };
+    } else {
+      // Fallback to local storage (should unlikely happen with hardcoded valid config)
+      console.warn("Cloud init failed, falling back to local storage");
       const savedCleaners = localStorage.getItem('cleanersData');
-      if (savedCleaners) {
-        setCleanersList(JSON.parse(savedCleaners));
-      } else {
-        setCleanersList(CLEANERS);
-      }
+      if (savedCleaners) setCleanersList(JSON.parse(savedCleaners));
+      else setCleanersList(CLEANERS);
 
-      // Load Logs
       const savedLogs = localStorage.getItem('cleaningLogs');
-      if (savedLogs) {
-        setLogs(JSON.parse(savedLogs));
-      } else {
+      if (savedLogs) setLogs(JSON.parse(savedLogs));
+      else {
         const initial = generateInitialLogs();
         setLogs(initial);
         localStorage.setItem('cleaningLogs', JSON.stringify(initial));
       }
-
-      // LocalStorage Listener for cross-tab sync in Local Mode
-      const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === 'cleaningLogs' && e.newValue) setLogs(JSON.parse(e.newValue));
-        if (e.key === 'cleanersData' && e.newValue) setCleanersList(JSON.parse(e.newValue));
-      };
-      window.addEventListener('storage', handleStorageChange);
-      return () => window.removeEventListener('storage', handleStorageChange);
     }
   }, []);
 
-  // 2. Persist Local Data (Only in Local Mode)
+  // 2. Persist Local Data (Backup only)
   useEffect(() => {
     if (!isCloudMode && cleanersList.length > 0) {
       localStorage.setItem('cleanersData', JSON.stringify(cleanersList));
@@ -132,7 +103,6 @@ const App: React.FC = () => {
 
   const handleLogCleaning = async (locationId: string) => {
     if (!currentCleaner) return;
-
     const newLog: CleaningLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       locationId,
@@ -140,26 +110,18 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       status: 'completed'
     };
-    
-    if (isCloudMode) {
-      await addCleaningLog(newLog);
-    } else {
-      setLogs(prev => [newLog, ...prev]);
-    }
+    if (isCloudMode) await addCleaningLog(newLog);
+    else setLogs(prev => [newLog, ...prev]);
   };
 
   const handleResetData = async () => {
     if(confirm(t.resetConfirm)) {
-      if (isCloudMode) {
-        await clearAllLogs();
-      } else {
-        setLogs([]);
-      }
+      if (isCloudMode) await clearAllLogs();
+      else setLogs([]);
     }
   }
 
   const handleRefreshData = () => {
-    // Only needed for local mode to force reload from storage if events failed
     if (!isCloudMode) {
        const savedLogs = localStorage.getItem('cleaningLogs');
        if (savedLogs) setLogs(JSON.parse(savedLogs));
@@ -168,9 +130,7 @@ const App: React.FC = () => {
 
   const handleExportData = () => {
     let csvContent = "\uFEFF"; 
-    const headers = language === 'zh' 
-      ? "日期,时间,点位名称,区域,保洁员,状态\n"
-      : "Date,Time,Location,Zone,Cleaner,Status\n";
+    const headers = language === 'zh' ? "日期,时间,点位名称,区域,保洁员,状态\n" : "Date,Time,Location,Zone,Cleaner,Status\n";
     csvContent += headers;
 
     logs.forEach(log => {
@@ -202,169 +162,137 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'zh' : 'en');
-  }
+  const toggleLanguage = () => setLanguage(prev => prev === 'en' ? 'zh' : 'en');
 
-  // Render
-  if (!currentUserRole) {
-    return (
-      <>
-        {/* Language Toggle */}
-        <div className="absolute top-4 right-4 z-50">
-           <button 
-              onClick={toggleLanguage}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white shadow-sm border border-slate-200 text-sm font-medium text-slate-500 hover:text-brand-600"
-            >
-              <Globe size={16} />
-              <span>{language === 'en' ? '中文' : 'En'}</span>
-            </button>
-        </div>
-        
+  // --- RENDER ---
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 relative">
+      
+      {/* GLOBAL: Language Toggle (Top Right) */}
+      <div className="fixed top-4 right-4 z-[9999] no-print">
+         <button 
+            onClick={toggleLanguage}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white shadow-md border border-slate-200 text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors"
+          >
+            <Globe size={16} />
+            <span>{language === 'en' ? '中文' : 'En'}</span>
+          </button>
+      </div>
+
+      {/* MAIN VIEW SWITCHER */}
+      {!currentUserRole ? (
         <LoginScreen 
-          cleaners={cleanersList.length > 0 ? cleanersList : CLEANERS} // Fallback to constant if init hasn't finished
+          cleaners={cleanersList.length > 0 ? cleanersList : CLEANERS}
           onLogin={handleLogin} 
           language={language} 
         />
-      </>
-    );
-  }
+      ) : (
+        <>
+          {currentUserRole === 'manager' && (
+            <nav className="bg-white border-b border-slate-200 sticky top-0 z-40 no-print">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between h-16">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
+                      CT
+                    </div>
+                    <span className="font-bold text-xl tracking-tight text-slate-800 hidden sm:block">
+                      {t.appTitle}
+                    </span>
+                    <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded border border-slate-200 uppercase font-bold">Manager</span>
+                  </div>
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      
-      <CloudSetup 
-        isOpen={showCloudSetup} 
-        onClose={() => setShowCloudSetup(false)} 
-        language={language} 
-      />
+                  <div className="flex items-center gap-2 sm:gap-4">
+                    {/* Cloud status indicator */}
+                    <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-green-50 border border-green-100 text-xs text-green-700 font-medium">
+                      <Cloud size={14} className="text-green-500" />
+                      {language === 'zh' ? '云端在线' : 'Cloud Online'}
+                    </div>
 
-      {currentUserRole === 'manager' && (
-        <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
-                  CT
+                    <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+
+                    <div className="flex bg-slate-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setView('dashboard')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                          view === 'dashboard' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        <LayoutDashboard size={16} />
+                        <span className="hidden sm:inline">{t.manager}</span>
+                      </button>
+                      <button
+                        onClick={() => setView('qr-print')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                          view === 'qr-print' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        <Printer size={16} />
+                        <span className="hidden sm:inline">{t.qrCodes}</span>
+                      </button>
+                    </div>
+
+                    <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-4 ml-2">
+                      <button 
+                        onClick={handleExportData} 
+                        className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 px-2 py-1 hover:bg-slate-50 rounded"
+                        title={t.export}
+                      >
+                        <Download size={14} />
+                        {t.export}
+                      </button>
+                      <button 
+                        onClick={handleResetData} 
+                        className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
+                        title={t.reset}
+                      >
+                        <Trash2 size={14} />
+                        {t.reset}
+                      </button>
+                    </div>
+
+                    <button 
+                      onClick={handleLogout}
+                      className="ml-2 p-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors"
+                      title={t.logout}
+                    >
+                      <LogOut size={20} />
+                    </button>
+                  </div>
                 </div>
-                <span className="font-bold text-xl tracking-tight text-slate-800 hidden sm:block">
-                  {t.appTitle}
-                </span>
-                <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded border border-slate-200 uppercase font-bold">Manager</span>
               </div>
+            </nav>
+          )}
 
-              <div className="flex items-center gap-2 sm:gap-4">
-                
-                {/* --- HEADER CLOUD BUTTON --- */}
-                <button 
-                  onClick={() => setShowCloudSetup(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all shadow-sm ${
-                    isCloudMode 
-                    ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200' 
-                    : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'
-                  }`}
-                  title="Setup Cloud Sync"
-                >
-                  {isCloudMode ? <Cloud size={18} /> : <ServerCog size={18} />}
-                  <span>
-                    {isCloudMode 
-                      ? (language === 'zh' ? '已同步' : 'Synced') 
-                      : (language === 'zh' ? '云端配置' : 'Setup Cloud')}
-                  </span>
-                </button>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {currentUserRole === 'manager' && view === 'dashboard' && (
+              <Dashboard 
+                locations={LOCATIONS} 
+                logs={logs} 
+                cleaners={cleanersList}
+                onUpdateCleaner={handleUpdateCleaner}
+                language={language}
+                onRefresh={handleRefreshData}
+                isCloudMode={isCloudMode}
+              />
+            )}
+            
+            {currentUserRole === 'manager' && view === 'qr-print' && (
+              <QRCodeGenerator locations={LOCATIONS} language={language} />
+            )}
 
-                <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-
-                <div className="flex bg-slate-100 rounded-lg p-1">
-                  <button
-                    onClick={() => setView('dashboard')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      view === 'dashboard' 
-                        ? 'bg-white text-brand-600 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    <LayoutDashboard size={16} />
-                    <span className="hidden sm:inline">{t.manager}</span>
-                  </button>
-                  <button
-                    onClick={() => setView('qr-print')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                      view === 'qr-print' 
-                        ? 'bg-white text-brand-600 shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    <Printer size={16} />
-                    <span className="hidden sm:inline">{t.qrCodes}</span>
-                  </button>
-                </div>
-
-                <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-4 ml-2">
-                   <button 
-                    onClick={handleExportData} 
-                    className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 px-2 py-1 hover:bg-slate-50 rounded"
-                    title={t.export}
-                   >
-                    <Download size={14} />
-                    {t.export}
-                  </button>
-                  <button 
-                    onClick={handleResetData} 
-                    className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
-                    title={t.reset}
-                  >
-                    <Trash2 size={14} />
-                    {t.reset}
-                  </button>
-                </div>
-
-                <button 
-                  onClick={handleLogout}
-                  className="ml-2 p-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors"
-                  title={t.logout}
-                >
-                  <LogOut size={20} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </nav>
+            {currentUserRole === 'cleaner' && currentCleaner && (
+              <CleanerInterface 
+                locations={LOCATIONS}
+                currentCleaner={currentCleaner}
+                onLogCleaning={handleLogCleaning}
+                language={language}
+                onLogout={handleLogout}
+              />
+            )}
+          </main>
+        </>
       )}
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {currentUserRole === 'manager' && view === 'dashboard' && (
-          <Dashboard 
-            locations={LOCATIONS} 
-            logs={logs} 
-            cleaners={cleanersList}
-            onUpdateCleaner={handleUpdateCleaner}
-            language={language}
-            onRefresh={handleRefreshData}
-            onOpenCloudSetup={() => setShowCloudSetup(true)}
-            isCloudMode={isCloudMode}
-          />
-        )}
-        
-        {currentUserRole === 'manager' && view === 'qr-print' && (
-          <QRCodeGenerator
-            locations={LOCATIONS}
-            language={language}
-          />
-        )}
-
-        {currentUserRole === 'cleaner' && currentCleaner && (
-          <CleanerInterface 
-            locations={LOCATIONS}
-            currentCleaner={currentCleaner}
-            onLogCleaning={handleLogCleaning}
-            language={language}
-            onLogout={handleLogout}
-          />
-        )}
-      </main>
-
     </div>
   );
 };

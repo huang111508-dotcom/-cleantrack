@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Cleaner, Language, UserRole } from '../types';
 import { TRANSLATIONS, DEFAULT_MANAGER_PASSWORD } from '../constants';
 import { ShieldCheck, User, Lock, LogIn } from 'lucide-react';
-import CloudSetup from './CloudSetup';
-import { getStoredConfig } from '../services/firebase';
 
 interface LoginScreenProps {
   cleaners: Cleaner[];
@@ -16,29 +14,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   const [selectedCleanerId, setSelectedCleanerId] = useState<string>('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showCloudSetup, setShowCloudSetup] = useState(false);
-  const [isCloudConfigured, setIsCloudConfigured] = useState(false);
 
   const t = TRANSLATIONS[language];
-
-  // Check initial cloud status
-  useEffect(() => {
-    setIsCloudConfigured(!!getStoredConfig());
-    if (window.location.hash === '#setup') {
-      setShowCloudSetup(true);
-    }
-  }, [showCloudSetup]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    // --- MAGIC TRIGGER: Type "setup" in password field to open config ---
-    if (password.trim().toLowerCase() === 'setup') {
-      setShowCloudSetup(true);
-      setPassword('');
-      return;
-    }
 
     if (activeTab === 'manager') {
       if (password === DEFAULT_MANAGER_PASSWORD) {
@@ -61,14 +42,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
       
-      <CloudSetup 
-        isOpen={showCloudSetup} 
-        onClose={() => setShowCloudSetup(false)} 
-        language={language} 
-      />
-
       <div className="mb-6 text-center">
         <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl">
           CT
@@ -135,10 +110,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
                 required
               />
             </div>
-            {/* Helper Text for "Setup" password */}
-            <p className="text-[10px] text-slate-300 text-right pt-1">
-               Tip: 密码输入 'setup' 可强制打开配置
-            </p>
           </div>
 
           {error && (
@@ -154,40 +125,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
             <LogIn size={20} />
             {t.login}
           </button>
-
-          {/* --- FAILSAFE BIG BUTTON --- */}
-          {/* Using inline styles to guarantee visibility regardless of Tailwind */}
-          <div className="pt-4 border-t border-slate-100 mt-4">
-             <button
-               type="button"
-               onClick={() => setShowCloudSetup(true)}
-               style={{ 
-                 backgroundColor: '#334155', 
-                 color: 'white', 
-                 border: '2px solid #e2e8f0',
-                 width: '100%',
-                 padding: '12px',
-                 borderRadius: '8px',
-                 fontWeight: 'bold',
-                 display: 'flex',
-                 alignItems: 'center',
-                 justifyContent: 'center',
-                 gap: '8px',
-                 cursor: 'pointer'
-               }}
-             >
-               <span>🛠️</span>
-               <span>{language === 'zh' ? '配置云端数据库 (点击这里)' : 'Setup Cloud Database'}</span>
-             </button>
-             <div className="text-center text-xs text-slate-400 mt-2">
-               {isCloudConfigured ? '🟢 云端已连接 (Online)' : '⚪ 本地模式 (Local Mode)'}
-             </div>
-          </div>
         </form>
       </div>
 
       <div className="mt-8 text-center text-slate-300 text-xs">
-         CleanTrack v1.4
+         CleanTrack v1.6
       </div>
     </div>
   );

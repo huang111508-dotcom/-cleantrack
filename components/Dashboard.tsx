@@ -14,10 +14,8 @@ import {
   Edit,
   Save,
   RotateCw,
-  ServerCog,
   Cloud
 } from 'lucide-react';
-import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 
 interface DashboardProps {
   locations: Location[];
@@ -26,7 +24,6 @@ interface DashboardProps {
   language: Language;
   onUpdateCleaner: (updatedCleaner: Cleaner) => void;
   onRefresh: () => void;
-  onOpenCloudSetup: () => void;
   isCloudMode: boolean;
 }
 
@@ -37,7 +34,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   language, 
   onUpdateCleaner, 
   onRefresh,
-  onOpenCloudSetup,
   isCloudMode
 }) => {
   const [analysis, setAnalysis] = useState<string>('');
@@ -95,12 +91,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     l.displayName.toLowerCase().includes(filterText.toLowerCase()) ||
     l.zone.toLowerCase().includes(filterText.toLowerCase())
   );
-
-  const pieData = [
-    { name: t.cleaned, value: totalCleaned },
-    { name: 'Remaining', value: Math.max(0, totalTarget - totalCleaned) },
-  ];
-  const COLORS = ['#0ea5e9', '#e2e8f0'];
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -166,27 +156,22 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
         </div>
 
-        {/* CLOUD CONFIG CARD (Added for explicit visibility) */}
-         <div 
-           className="bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
-           onClick={onOpenCloudSetup}
-         >
+        {/* STATUS CARD (Display Only) */}
+         <div className="bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-700">
            <div className="flex items-center justify-between text-white">
             <div>
               <p className="text-sm text-slate-300 font-medium">System</p>
               <h3 className="text-lg font-bold">
-                {isCloudMode 
-                  ? (language === 'zh' ? '云端已同步' : 'Cloud Active') 
-                  : (language === 'zh' ? '配置云端' : 'Setup Cloud')}
+                 {language === 'zh' ? '云端已连接' : 'Cloud Active'}
               </h3>
             </div>
-            <div className={`p-3 rounded-full ${isCloudMode ? 'bg-green-500 text-white' : 'bg-slate-600 text-slate-300'}`}>
-              {isCloudMode ? <Cloud size={24} /> : <ServerCog size={24} />}
+            <div className="p-3 rounded-full bg-green-500 text-white">
+               <Cloud size={24} />
             </div>
           </div>
            <p className="text-xs text-slate-400 mt-4 flex items-center gap-1">
-             <div className={`w-2 h-2 rounded-full ${isCloudMode ? 'bg-green-400' : 'bg-red-400'}`}></div>
-             {isCloudMode ? 'Firebase Connected' : 'Local Storage Only'}
+             <div className="w-2 h-2 rounded-full bg-green-400"></div>
+             {language === 'zh' ? '数据实时同步中' : 'Data Syncing'}
            </p>
         </div>
       </div>
