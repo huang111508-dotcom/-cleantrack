@@ -226,18 +226,6 @@ const App: React.FC = () => {
           onLogin={handleLogin} 
           language={language} 
         />
-
-        <div className="fixed bottom-4 left-4 z-40 text-xs text-slate-400 pointer-events-none">
-           {isCloudMode ? (
-             <span className="flex items-center gap-1 text-green-600 font-medium bg-white/80 px-2 py-1 rounded shadow-sm">
-               <Cloud size={12} /> {language === 'zh' ? '云端已连接' : 'Cloud Connected'}
-             </span>
-           ) : (
-             <span className="flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm">
-               <CloudOff size={12} /> {language === 'zh' ? '本地模式' : 'Local Mode'}
-             </span>
-           )}
-        </div>
       </>
     );
   }
@@ -266,13 +254,14 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
-                {/* --- MANAGER NAV BUTTON (Updated for Visibility) --- */}
+                
+                {/* --- HEADER CLOUD BUTTON --- */}
                 <button 
                   onClick={() => setShowCloudSetup(true)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all shadow-sm ${
                     isCloudMode 
                     ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200' 
-                    : 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 animate-pulse'
+                    : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'
                   }`}
                   title="Setup Cloud Sync"
                 >
@@ -280,7 +269,7 @@ const App: React.FC = () => {
                   <span>
                     {isCloudMode 
                       ? (language === 'zh' ? '已同步' : 'Synced') 
-                      : (language === 'zh' ? '配置云端' : 'Setup Cloud')}
+                      : (language === 'zh' ? '云端配置' : 'Setup Cloud')}
                   </span>
                 </button>
 
@@ -353,6 +342,8 @@ const App: React.FC = () => {
             onUpdateCleaner={handleUpdateCleaner}
             language={language}
             onRefresh={handleRefreshData}
+            onOpenCloudSetup={() => setShowCloudSetup(true)}
+            isCloudMode={isCloudMode}
           />
         )}
         

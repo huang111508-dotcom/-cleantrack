@@ -29,9 +29,6 @@ const CloudSetup: React.FC<CloudSetupProps> = ({ isOpen, onClose, language }) =>
         cleanJson = cleanJson.slice(0, -1);
       }
 
-      // Fix unquoted keys if necessary (simple regex attempt, but ideally user pastes JSON)
-      // For now, assume user pastes valid JSON or we instruct them to.
-      
       const config = JSON.parse(cleanJson);
       
       if (!config.apiKey || !config.projectId) {
@@ -61,20 +58,21 @@ const CloudSetup: React.FC<CloudSetupProps> = ({ isOpen, onClose, language }) =>
     cancel: language === 'zh' ? '关闭' : 'Close'
   };
 
+  // Z-Index set to 10000 to be absolutely sure it's on top
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
           <div className="flex items-center gap-2 font-bold text-lg">
             <Cloud className="text-brand-400" />
             {t.title}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
-            <X />
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-2">
+            <X size={24} />
           </button>
         </div>
         
-        <div className="p-6">
+        <div className="p-6 max-h-[80vh] overflow-y-auto">
           {isConfigured ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -88,7 +86,7 @@ const CloudSetup: React.FC<CloudSetupProps> = ({ isOpen, onClose, language }) =>
               </p>
               <button 
                 onClick={clearConfig}
-                className="flex items-center justify-center gap-2 mx-auto text-red-600 bg-red-50 hover:bg-red-100 px-6 py-3 rounded-lg font-medium transition-colors"
+                className="flex items-center justify-center gap-2 mx-auto text-red-600 bg-red-50 hover:bg-red-100 px-6 py-3 rounded-lg font-medium transition-colors border border-red-200"
               >
                 <Trash2 size={18} />
                 {t.disconnect}
@@ -101,7 +99,7 @@ const CloudSetup: React.FC<CloudSetupProps> = ({ isOpen, onClose, language }) =>
               </p>
               
               <textarea
-                className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 font-mono text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none mb-2"
+                className="w-full h-40 bg-slate-50 border border-slate-200 rounded-lg p-3 font-mono text-xs focus:ring-2 focus:ring-brand-500 focus:outline-none mb-2 text-slate-800"
                 placeholder={t.placeholder}
                 value={configJson}
                 onChange={(e) => { setConfigJson(e.target.value); setError(''); }}
@@ -114,7 +112,7 @@ const CloudSetup: React.FC<CloudSetupProps> = ({ isOpen, onClose, language }) =>
               <div className="flex gap-3 mt-4">
                 <button 
                   onClick={onClose}
-                  className="flex-1 py-3 text-slate-500 font-medium hover:bg-slate-50 rounded-lg"
+                  className="flex-1 py-3 text-slate-600 font-bold bg-slate-100 hover:bg-slate-200 rounded-lg"
                 >
                   {t.cancel}
                 </button>
