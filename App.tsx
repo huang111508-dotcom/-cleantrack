@@ -15,7 +15,7 @@ import {
   seedCleanersIfEmpty,
   clearAllLogs
 } from './services/firebase';
-import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, CloudOff } from 'lucide-react';
+import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, CloudOff, ServerCog } from 'lucide-react';
 
 const App: React.FC = () => {
   // Application State
@@ -210,6 +210,7 @@ const App: React.FC = () => {
   if (!currentUserRole) {
     return (
       <>
+        {/* Language Toggle */}
         <div className="absolute top-4 right-4 z-50">
            <button 
               onClick={toggleLanguage}
@@ -219,19 +220,21 @@ const App: React.FC = () => {
               <span>{language === 'en' ? '中文' : 'En'}</span>
             </button>
         </div>
+        
         <LoginScreen 
           cleaners={cleanersList.length > 0 ? cleanersList : CLEANERS} // Fallback to constant if init hasn't finished
           onLogin={handleLogin} 
           language={language} 
         />
-        <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center gap-2 text-xs text-slate-400">
+
+        <div className="fixed bottom-4 left-4 z-40 text-xs text-slate-400 pointer-events-none">
            {isCloudMode ? (
-             <span className="flex items-center gap-1 text-green-600 font-medium">
-               <Cloud size={12} /> {language === 'zh' ? '云端同步已开启' : 'Cloud Sync Active'}
+             <span className="flex items-center gap-1 text-green-600 font-medium bg-white/80 px-2 py-1 rounded shadow-sm">
+               <Cloud size={12} /> {language === 'zh' ? '云端已连接' : 'Cloud Connected'}
              </span>
            ) : (
-             <span className="flex items-center gap-1">
-               <CloudOff size={12} /> {language === 'zh' ? '本地演示模式 (无跨设备同步)' : 'Local Demo Mode (No Sync)'}
+             <span className="flex items-center gap-1 bg-white/80 px-2 py-1 rounded shadow-sm">
+               <CloudOff size={12} /> {language === 'zh' ? '本地模式' : 'Local Mode'}
              </span>
            )}
         </div>
@@ -263,20 +266,21 @@ const App: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 sm:gap-4">
+                {/* --- MANAGER NAV BUTTON (Updated for Visibility) --- */}
                 <button 
                   onClick={() => setShowCloudSetup(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold transition-all shadow-sm ${
                     isCloudMode 
-                    ? 'bg-green-50 text-green-700 border border-green-200' 
-                    : 'bg-slate-50 text-slate-500 border border-slate-200'
+                    ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200' 
+                    : 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 animate-pulse'
                   }`}
                   title="Setup Cloud Sync"
                 >
-                  {isCloudMode ? <Cloud size={16} /> : <CloudOff size={16} />}
-                  <span className="hidden sm:inline">
+                  {isCloudMode ? <Cloud size={18} /> : <ServerCog size={18} />}
+                  <span>
                     {isCloudMode 
                       ? (language === 'zh' ? '已同步' : 'Synced') 
-                      : (language === 'zh' ? '配置云端' : 'Setup Sync')}
+                      : (language === 'zh' ? '配置云端' : 'Setup Cloud')}
                   </span>
                 </button>
 
