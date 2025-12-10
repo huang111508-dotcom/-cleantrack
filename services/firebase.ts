@@ -15,6 +15,7 @@ import {
 import { CleaningLog, Cleaner, FirebaseConfig } from '../types';
 
 // Hardcoded configuration provided by user
+// Using this STRICTLY to ensure mobile and PC are on the same DB.
 const DEFAULT_CONFIG: FirebaseOptions = {
   apiKey: "AIzaSyBpnGlzbdVSsMbd7UIDMpznEPx8sk6jqP0",
   authDomain: "cleantrack-demo.firebaseapp.com",
@@ -25,49 +26,30 @@ const DEFAULT_CONFIG: FirebaseOptions = {
   measurementId: "G-CD8YYGJ0PG"
 };
 
-const STORAGE_KEY = 'firebase_config_override';
-
-export const getStoredConfig = (): FirebaseConfig | null => {
-  if (typeof window === 'undefined') return null;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored ? JSON.parse(stored) : null;
-};
-
-export const saveConfig = (config: FirebaseConfig) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  window.location.reload();
-};
-
-export const clearConfig = () => {
-  localStorage.removeItem(STORAGE_KEY);
-  window.location.reload();
-};
-
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 
 // Initialize Firebase automatically
 export const initFirebase = (): boolean => {
   try {
-    const storedConfig = getStoredConfig();
-    // Use stored config if available, otherwise default
-    const configToUse = storedConfig ? (storedConfig as unknown as FirebaseOptions) : DEFAULT_CONFIG;
+    // FORCE usage of DEFAULT_CONFIG to fix sync issues.
+    // We ignore localStorage overrides to ensure consistency across devices.
+    const configToUse = DEFAULT_CONFIG;
 
     if (!getApps().length) {
       app = initializeApp(configToUse);
-      // Initialize Analytics as per provided snippet
       if (typeof window !== 'undefined') {
         try {
            getAnalytics(app);
         } catch (e) {
-           console.warn("Analytics init failed (likely due to ad blocker), continuing...", e);
+           console.warn("Analytics init failed, continuing...", e);
         }
       }
     } else {
       app = getApp();
     }
     db = getFirestore(app);
-    console.log("Firebase initialized successfully.");
+    console.log("Firebase initialized successfully with hardcoded config.");
     return true;
   } catch (e) {
     console.error("Firebase Init Error:", e);
@@ -81,22 +63,31 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void) => {
   if (!db) return () => {};
 
   const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
-  return onSnapshot(q, (snapshot) => {
+  
+  // Real-time listener
+  const unsubscribe = onSnapshot(q, (snapshot) => {
     const logs: CleaningLog[] = [];
     snapshot.forEach((doc) => {
       logs.push({ id: doc.id, ...doc.data() } as CleaningLog);
     });
+    console.log(`Synced ${logs.length} logs from cloud.`);
     callback(logs);
   }, (error) => {
     console.error("Logs subscription error:", error);
   });
+
+  return unsubscribe;
 };
 
 export const addCleaningLog = async (log: CleaningLog) => {
-  if (!db) return;
+  if (!db) {
+    console.error("Cannot add log: DB not initialized");
+    return;
+  }
   try {
     const docRef = doc(collection(db, 'logs'), log.id); 
     await setDoc(docRef, log);
+    console.log("Log uploaded to cloud:", log.id);
   } catch (e) {
     console.error("Error adding log:", e);
     throw e;
@@ -154,3 +145,8 @@ export const clearAllLogs = async () => {
   
   await batch.commit();
 };
+
+// Kept for type compatibility but functionality removed to force sync
+export const getStoredConfig = (): FirebaseConfig | null => null;
+export const saveConfig = (config: FirebaseConfig) => {};
+export const clearConfig = () => {};

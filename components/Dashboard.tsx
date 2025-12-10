@@ -14,7 +14,8 @@ import {
   Edit,
   Save,
   RotateCw,
-  Cloud
+  Cloud,
+  Target
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -144,15 +145,22 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500 font-medium">{t.totalCleanings}</p>
-              <h3 className="text-2xl font-bold text-slate-800">{totalCleaned}</h3>
+              <p className="text-sm text-slate-500 font-medium">
+                {language === 'zh' ? '今日清洁进度' : 'Today\'s Progress'}
+              </p>
+              <h3 className="text-2xl font-bold text-slate-800 flex items-baseline gap-1">
+                <span>{totalCleaned}</span>
+                <span className="text-lg text-slate-400 font-normal">/ {totalTarget}</span>
+              </h3>
             </div>
             <div className="p-3 bg-indigo-50 text-indigo-500 rounded-full">
-              <RefreshCw size={24} />
+              <Target size={24} />
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            {language === 'zh' ? `今日目标: ${totalTarget} 次` : `Of ${totalTarget} required today`}
+            {language === 'zh' 
+              ? `剩余任务: ${Math.max(0, totalTarget - totalCleaned)} 次` 
+              : `Remaining: ${Math.max(0, totalTarget - totalCleaned)} tasks`}
           </p>
         </div>
 
