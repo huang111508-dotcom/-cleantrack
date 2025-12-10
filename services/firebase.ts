@@ -33,7 +33,6 @@ let db: Firestore | undefined;
 export const initFirebase = (): boolean => {
   try {
     // FORCE usage of DEFAULT_CONFIG to fix sync issues.
-    // We ignore localStorage overrides to ensure consistency across devices.
     const configToUse = DEFAULT_CONFIG;
 
     if (!getApps().length) {
@@ -79,6 +78,23 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void) => {
   return unsubscribe;
 };
 
+// NEW: Manual fetch for when real-time sync hiccups
+export const fetchLogs = async (): Promise<CleaningLog[]> => {
+  if (!db) return [];
+  try {
+    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+    const snapshot = await getDocs(q);
+    const logs: CleaningLog[] = [];
+    snapshot.forEach((doc) => {
+      logs.push({ id: doc.id, ...doc.data() } as CleaningLog);
+    });
+    return logs;
+  } catch (e) {
+    console.error("Error fetching logs manually:", e);
+    return [];
+  }
+};
+
 export const addCleaningLog = async (log: CleaningLog) => {
   if (!db) {
     console.error("Cannot add log: DB not initialized");
@@ -90,6 +106,7 @@ export const addCleaningLog = async (log: CleaningLog) => {
     console.log("Log uploaded to cloud:", log.id);
   } catch (e) {
     console.error("Error adding log:", e);
+    alert("Error uploading data. Check your internet connection or database rules.");
     throw e;
   }
 };
@@ -146,7 +163,6 @@ export const clearAllLogs = async () => {
   await batch.commit();
 };
 
-// Kept for type compatibility but functionality removed to force sync
 export const getStoredConfig = (): FirebaseConfig | null => null;
 export const saveConfig = (config: FirebaseConfig) => {};
 export const clearConfig = () => {};

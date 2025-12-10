@@ -12,7 +12,8 @@ import {
   addCleaningLog, 
   updateCleaner,
   seedCleanersIfEmpty,
-  clearAllLogs
+  clearAllLogs,
+  fetchLogs // Import the new fetch function
 } from './services/firebase';
 import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud } from 'lucide-react';
 
@@ -46,7 +47,7 @@ const App: React.FC = () => {
       const unsubCleaners = subscribeToCleaners((newCleaners) => setCleanersList(newCleaners));
       return () => { unsubLogs(); unsubCleaners(); };
     } else {
-      // Fallback to local storage (should unlikely happen with hardcoded valid config)
+      // Fallback to local storage
       console.warn("Cloud init failed, falling back to local storage");
       const savedCleaners = localStorage.getItem('cleanersData');
       if (savedCleaners) setCleanersList(JSON.parse(savedCleaners));
@@ -121,8 +122,14 @@ const App: React.FC = () => {
     }
   }
 
-  const handleRefreshData = () => {
-    if (!isCloudMode) {
+  const handleRefreshData = async () => {
+    if (isCloudMode) {
+       // Manual fetch from cloud
+       const freshLogs = await fetchLogs();
+       setLogs(freshLogs);
+       console.log("Manually refreshed logs from cloud");
+    } else {
+       // Manual fetch from local storage
        const savedLogs = localStorage.getItem('cleaningLogs');
        if (savedLogs) setLogs(JSON.parse(savedLogs));
     }
