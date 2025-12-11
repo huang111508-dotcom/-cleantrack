@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Cleaner, Language, UserRole } from '../types';
 import { TRANSLATIONS, DEFAULT_MANAGER_PASSWORD } from '../constants';
-import { ShieldCheck, User, Lock, LogIn } from 'lucide-react';
+import { ShieldCheck, User, Lock, LogIn, Cloud } from 'lucide-react';
 
 interface LoginScreenProps {
   cleaners: Cleaner[];
@@ -42,11 +42,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-50">
       
       <div className="mb-6 text-center">
-        <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl">
+        <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg mx-auto mb-4 text-2xl relative">
           CT
+          <div className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1.5 border-2 border-white shadow-sm">
+             <Cloud size={12} fill="white" className="text-white" />
+          </div>
         </div>
         <h1 className="text-2xl font-bold text-slate-800">{t.appTitle}</h1>
         <p className="text-slate-500 mt-1">{t.loginTitle}</p>
@@ -128,8 +131,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
         </form>
       </div>
 
-      <div className="mt-8 text-center text-slate-300 text-xs">
-         CleanTrack v1.5
+      <div className="mt-8 text-center flex flex-col items-center gap-1">
+         <span className="text-brand-600 bg-brand-50 px-3 py-1 rounded-full text-xs font-bold border border-brand-100">
+            CleanTrack System v3.0
+         </span>
+         <span className="text-slate-400 text-[10px] flex items-center gap-1">
+           <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+           Cloud Connected
+         </span>
       </div>
     </div>
   );

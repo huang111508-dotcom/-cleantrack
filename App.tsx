@@ -207,7 +207,7 @@ const App: React.FC = () => {
                     <span className="font-bold text-xl tracking-tight text-slate-800">
                       {t.appTitle}
                     </span>
-                    <span className="ml-1 text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">v2.0</span>
+                    <span className="ml-1 text-[10px] text-white bg-brand-500 px-1.5 py-0.5 rounded-full font-bold">v3.0</span>
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-4">
