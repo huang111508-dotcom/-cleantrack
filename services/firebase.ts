@@ -13,7 +13,7 @@ import {
   getDocs,
   writeBatch
 } from 'firebase/firestore';
-import { CleaningLog, Cleaner, FirebaseConfig } from '../types';
+import { CleaningLog, Cleaner, Location, FirebaseConfig } from '../types';
 
 // Hardcoded configuration provided by user
 const DEFAULT_CONFIG: FirebaseOptions = {
@@ -110,6 +110,8 @@ export const addCleaningLog = async (log: CleaningLog) => {
   }
 };
 
+// --- Cleaners Operations ---
+
 export const subscribeToCleaners = (callback: (cleaners: Cleaner[]) => void) => {
   if (!db) return () => {};
 
@@ -178,6 +180,61 @@ export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {
     await batch.commit();
   }
 };
+
+// --- Locations Operations (NEW) ---
+
+export const subscribeToLocations = (callback: (locations: Location[]) => void) => {
+  if (!db) return () => {};
+
+  const q = query(collection(db, 'locations'));
+  return onSnapshot(q, (snapshot) => {
+    const locations: Location[] = [];
+    snapshot.forEach((doc) => {
+      locations.push({ id: doc.id, ...doc.data() } as Location);
+    });
+    // Sort logic to keep order consistent (by ID or name)
+    locations.sort((a,b) => {
+      // Try to sort naturally by ID number if possible (loc1, loc2...)
+      const numA = parseInt(a.id.replace('loc', '')) || 0;
+      const numB = parseInt(b.id.replace('loc', '')) || 0;
+      return numA - numB;
+    });
+    
+    if (locations.length > 0) {
+        callback(locations);
+    }
+  });
+};
+
+export const updateLocation = async (location: Location) => {
+  if (!db) return;
+  try {
+    const docRef = doc(db, 'locations', location.id);
+    await setDoc(docRef, location, { merge: true });
+    console.log("Updated location:", location.nameEn);
+  } catch (e) {
+    console.error("Error updating location:", e);
+  }
+};
+
+export const seedLocationsIfEmpty = async (defaultLocations: Location[]) => {
+  if (!db) return;
+  const colRef = collection(db, 'locations');
+  const snapshot = await getDocs(colRef);
+  
+  // If empty, or count is vastly different (simple check), seed.
+  // We prefer to seed only if empty to avoid overwriting user changes.
+  if (snapshot.empty) {
+    console.log("Seeding locations to cloud...");
+    const batch = writeBatch(db);
+    defaultLocations.forEach(l => {
+      const docRef = doc(colRef, l.id);
+      batch.set(docRef, l);
+    });
+    await batch.commit();
+  }
+};
+
 
 export const clearAllLogs = async () => {
   if (!db) return;

@@ -9,27 +9,28 @@ export const CLEANERS: Cleaner[] = [
   { id: 'c3', name: 'Mike Johnson', avatar: 'https://picsum.photos/100/100?random=3', password: '123' },
 ];
 
+// Set all defaults to 20 as requested
 export const LOCATIONS: Location[] = [
-  { id: 'loc1', nameZh: '广场', nameEn: 'Outdoor Square', zone: 'Outdoor', targetDailyFrequency: 10 },
-  { id: 'loc2', nameZh: '入口（包含购物车购物篮）', nameEn: 'Entrance & Carts', zone: 'Entrance', targetDailyFrequency: 24 },
-  { id: 'loc3', nameZh: '右边走廊', nameEn: 'Right Corridor', zone: 'Sales Floor', targetDailyFrequency: 15 },
-  { id: 'loc4', nameZh: '2号台及粮油通道', nameEn: 'Checkout 2 & Grains/Oil', zone: 'Sales Floor', targetDailyFrequency: 15 },
-  { id: 'loc5', nameZh: '食品区通道', nameEn: 'Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 15 },
+  { id: 'loc1', nameZh: '广场', nameEn: 'Outdoor Square', zone: 'Outdoor', targetDailyFrequency: 20 },
+  { id: 'loc2', nameZh: '入口（包含购物车购物篮）', nameEn: 'Entrance & Carts', zone: 'Entrance', targetDailyFrequency: 20 },
+  { id: 'loc3', nameZh: '右边走廊', nameEn: 'Right Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc4', nameZh: '2号台及粮油通道', nameEn: 'Checkout 2 & Grains/Oil', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc5', nameZh: '食品区通道', nameEn: 'Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
   { id: 'loc6', nameZh: '3号、4号收银机台', nameEn: 'Checkout 3 & 4', zone: 'Front End', targetDailyFrequency: 20 },
-  { id: 'loc7', nameZh: '冰品区', nameEn: 'Ice Cream Zone', zone: 'Sales Floor', targetDailyFrequency: 12 },
-  { id: 'loc8', nameZh: '转盘区走廊', nameEn: 'Turntable Corridor', zone: 'Sales Floor', targetDailyFrequency: 15 },
-  { id: 'loc9', nameZh: '百货区', nameEn: 'General Merchandise', zone: 'Sales Floor', targetDailyFrequency: 10 },
-  { id: 'loc10', nameZh: '卫生间', nameEn: 'Restroom', zone: 'Facilities', targetDailyFrequency: 24 },
-  { id: 'loc11', nameZh: '卫生巾、纸巾、米粉区副通道', nameEn: 'Hygiene & Baby Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 12 },
-  { id: 'loc12', nameZh: '左边走廊', nameEn: 'Left Corridor', zone: 'Sales Floor', targetDailyFrequency: 15 },
+  { id: 'loc7', nameZh: '冰品区', nameEn: 'Ice Cream Zone', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc8', nameZh: '转盘区走廊', nameEn: 'Turntable Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc9', nameZh: '百货区', nameEn: 'General Merchandise', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc10', nameZh: '卫生间', nameEn: 'Restroom', zone: 'Facilities', targetDailyFrequency: 20 },
+  { id: 'loc11', nameZh: '卫生巾、纸巾、米粉区副通道', nameEn: 'Hygiene & Baby Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc12', nameZh: '左边走廊', nameEn: 'Left Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
   { id: 'loc13', nameZh: '1号台5号台', nameEn: 'Checkout 1 & 5', zone: 'Front End', targetDailyFrequency: 20 },
-  { id: 'loc14', nameZh: '干货和冻品区主通道（含半圆垃圾桶、果切区）', nameEn: 'Dry/Frozen Main Aisle', zone: 'Sales Floor', targetDailyFrequency: 18 },
-  { id: 'loc15', nameZh: '蔬果区', nameEn: 'Produce Section', zone: 'Fresh', targetDailyFrequency: 18 },
+  { id: 'loc14', nameZh: '干货和冻品区主通道（含半圆垃圾桶、果切区）', nameEn: 'Dry/Frozen Main Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc15', nameZh: '蔬果区', nameEn: 'Produce Section', zone: 'Fresh', targetDailyFrequency: 20 },
   { id: 'loc16', nameZh: '水产区', nameEn: 'Seafood Section', zone: 'Fresh', targetDailyFrequency: 20 },
   { id: 'loc17', nameZh: '肉品区', nameEn: 'Meat Section', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc18', nameZh: '调料区', nameEn: 'Condiments Aisle', zone: 'Sales Floor', targetDailyFrequency: 12 },
+  { id: 'loc18', nameZh: '调料区', nameEn: 'Condiments Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
   { id: 'loc19', nameZh: '熟食烘焙区（含半圆垃圾桶）', nameEn: 'Deli & Bakery', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc20', nameZh: '饮料区', nameEn: 'Beverage Section', zone: 'Sales Floor', targetDailyFrequency: 15 },
+  { id: 'loc20', nameZh: '饮料区', nameEn: 'Beverage Section', zone: 'Sales Floor', targetDailyFrequency: 20 },
 ];
 
 export const TRANSLATIONS = {
@@ -57,6 +58,7 @@ export const TRANSLATIONS = {
     cleaned: "cleaned",
     onTrack: "On Track",
     behind: "Behind",
+    overachieved: "Overachieved", // New
     confirmLocation: "Confirm Location",
     scannedCodeFor: "Scanned Location:",
     completeTask: "Complete Task",
@@ -86,6 +88,8 @@ export const TRANSLATIONS = {
     save: "Save",
     teamManagement: "Team Management",
     resetConfirm: "Are you sure you want to clear ALL cleaning logs? This cannot be undone.",
+    editTarget: "Edit Target", // New
+    target: "Target", // New
   },
   zh: {
     appTitle: "龙城店保洁追踪系统",
@@ -111,6 +115,7 @@ export const TRANSLATIONS = {
     cleaned: "已清洁",
     onTrack: "正常",
     behind: "异常/落后",
+    overachieved: "超额完成", // New
     confirmLocation: "确认打卡点位",
     scannedCodeFor: "已扫描点位：",
     completeTask: "确认打卡",
@@ -140,6 +145,8 @@ export const TRANSLATIONS = {
     save: "保存",
     teamManagement: "保洁员账号管理",
     resetConfirm: "确定要清空所有历史打卡记录吗？此操作不可恢复。",
+    editTarget: "修改目标", // New
+    target: "目标次数", // New
   }
 };
 
@@ -152,7 +159,8 @@ export const generateInitialLogs = (): CleaningLog[] => {
   // Create some random logs for today
   LOCATIONS.forEach(loc => {
     // Randomize how many times it was cleaned (some compliant, some missing)
-    const completions = Math.floor(Math.random() * (loc.targetDailyFrequency + 2)); 
+    // Using 20 as base reference roughly
+    const completions = Math.floor(Math.random() * (loc.targetDailyFrequency + 5)); 
     
     for (let i = 0; i < completions; i++) {
       // Distribute timestamps across the day

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewState, CleaningLog, Cleaner, Language, UserRole } from './types';
+import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole } from './types';
 import { LOCATIONS, CLEANERS, generateInitialLogs, TRANSLATIONS } from './constants';
 import Dashboard from './components/Dashboard';
 import CleanerInterface from './components/CleanerInterface';
@@ -9,10 +9,13 @@ import {
   initFirebase, 
   subscribeToLogs, 
   subscribeToCleaners, 
+  subscribeToLocations, // New
+  updateLocation, // New
+  seedLocationsIfEmpty, // New
   addCleaningLog, 
   updateCleaner,
-  addNewCleaner, // New Import
-  deleteCleaner, // New Import
+  addNewCleaner, 
+  deleteCleaner, 
   seedCleanersIfEmpty,
   clearAllLogs,
   fetchLogs 
@@ -23,6 +26,7 @@ const App: React.FC = () => {
   // Application State
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
   const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
+  const [locationsList, setLocationsList] = useState<Location[]>(LOCATIONS); // Init with default
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
   
   const [view, setView] = useState<ViewState>('dashboard');
@@ -40,16 +44,34 @@ const App: React.FC = () => {
     setIsCloudMode(cloudInit);
 
     if (cloudInit) {
+      // Seed Data
       seedCleanersIfEmpty(CLEANERS);
+      seedLocationsIfEmpty(LOCATIONS);
+
+      // Subscribe
       const unsubLogs = subscribeToLogs((newLogs) => setLogs(newLogs));
       const unsubCleaners = subscribeToCleaners((newCleaners) => setCleanersList(newCleaners));
-      return () => { unsubLogs(); unsubCleaners(); };
+      const unsubLocations = subscribeToLocations((newLocs) => setLocationsList(newLocs));
+
+      return () => { 
+        unsubLogs(); 
+        unsubCleaners(); 
+        unsubLocations(); 
+      };
     } else {
       console.warn("Cloud init failed, falling back to local storage");
+      
+      // Load Cleaners
       const savedCleaners = localStorage.getItem('cleanersData');
       if (savedCleaners) setCleanersList(JSON.parse(savedCleaners));
       else setCleanersList(CLEANERS);
 
+      // Load Locations (New)
+      const savedLocations = localStorage.getItem('locationsData');
+      if (savedLocations) setLocationsList(JSON.parse(savedLocations));
+      else setLocationsList(LOCATIONS);
+
+      // Load Logs
       const savedLogs = localStorage.getItem('cleaningLogs');
       if (savedLogs) setLogs(JSON.parse(savedLogs));
       else {
@@ -66,6 +88,12 @@ const App: React.FC = () => {
       localStorage.setItem('cleanersData', JSON.stringify(cleanersList));
     }
   }, [cleanersList, isCloudMode]);
+
+  useEffect(() => {
+    if (!isCloudMode && locationsList.length > 0) {
+      localStorage.setItem('locationsData', JSON.stringify(locationsList));
+    }
+  }, [locationsList, isCloudMode]);
 
   useEffect(() => {
     if (!isCloudMode) {
@@ -95,6 +123,15 @@ const App: React.FC = () => {
       await updateCleaner(updatedCleaner);
     } else {
       setCleanersList(prev => prev.map(c => c.id === updatedCleaner.id ? updatedCleaner : c));
+    }
+  };
+
+  // NEW: Handle location updates (e.g. target frequency)
+  const handleUpdateLocation = async (updatedLocation: Location) => {
+    if (isCloudMode) {
+      await updateLocation(updatedLocation);
+    } else {
+      setLocationsList(prev => prev.map(l => l.id === updatedLocation.id ? updatedLocation : l));
     }
   };
 
@@ -161,7 +198,7 @@ const App: React.FC = () => {
 
     logs.forEach(log => {
       const dateObj = new Date(log.timestamp);
-      const loc = LOCATIONS.find(l => l.id === log.locationId);
+      const loc = locationsList.find(l => l.id === log.locationId);
       const locName = loc ? (language === 'zh' ? loc.nameZh : loc.nameEn) : 'Unknown';
       const zone = loc ? loc.zone : 'Unknown';
       const cleaner = cleanersList.find(c => c.id === log.cleanerId);
@@ -292,12 +329,13 @@ const App: React.FC = () => {
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {currentUserRole === 'manager' && view === 'dashboard' && (
               <Dashboard 
-                locations={LOCATIONS} 
+                locations={locationsList} // Use dynamic list
                 logs={logs} 
                 cleaners={cleanersList}
                 onUpdateCleaner={handleUpdateCleaner}
-                onAddCleaner={handleAddCleaner} // New Prop
-                onDeleteCleaner={handleDeleteCleaner} // New Prop
+                onUpdateLocation={handleUpdateLocation} // Pass update handler
+                onAddCleaner={handleAddCleaner}
+                onDeleteCleaner={handleDeleteCleaner} 
                 language={language}
                 onRefresh={handleRefreshData}
                 isCloudMode={isCloudMode}
@@ -305,12 +343,12 @@ const App: React.FC = () => {
             )}
             
             {currentUserRole === 'manager' && view === 'qr-print' && (
-              <QRCodeGenerator locations={LOCATIONS} language={language} />
+              <QRCodeGenerator locations={locationsList} language={language} />
             )}
 
             {currentUserRole === 'cleaner' && currentCleaner && (
               <CleanerInterface 
-                locations={LOCATIONS}
+                locations={locationsList}
                 currentCleaner={currentCleaner}
                 onLogCleaning={handleLogCleaning}
                 language={language}

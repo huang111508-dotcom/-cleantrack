@@ -18,7 +18,8 @@ import {
   Wifi,
   Plus,
   Trash2,
-  X
+  X,
+  Trophy // New icon for Overachieved
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -27,6 +28,7 @@ interface DashboardProps {
   cleaners: Cleaner[];
   language: Language;
   onUpdateCleaner: (updatedCleaner: Cleaner) => void;
+  onUpdateLocation: (updatedLocation: Location) => void; // New prop
   onAddCleaner: (name: string, password: string) => void;
   onDeleteCleaner: (id: string) => void;
   onRefresh: () => void;
@@ -39,6 +41,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   cleaners, 
   language, 
   onUpdateCleaner, 
+  onUpdateLocation,
   onAddCleaner,
   onDeleteCleaner,
   onRefresh,
@@ -48,12 +51,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
   
-  // Edit State
+  // Cleaner Edit State
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
 
-  // Add State
+  // Location Target Edit State (New)
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [editTargetFreq, setEditTargetFreq] = useState<string>('');
+
+  // Add Cleaner State
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -67,8 +74,13 @@ const Dashboard: React.FC<DashboardProps> = ({
   const locationStats = locations.map(loc => {
     const locLogs = todaysLogs.filter(l => l.locationId === loc.id);
     const count = locLogs.length;
-    const percentage = Math.min(100, Math.round((count / loc.targetDailyFrequency) * 100));
-    const isAtRisk = percentage < 80; // Simple threshold
+    // Cap percentage visual at 100 for the bar, but logic allows > 100
+    const percentage = Math.round((count / loc.targetDailyFrequency) * 100);
+    
+    // Status Logic
+    const isOverachieved = count > loc.targetDailyFrequency;
+    const isAtRisk = percentage < 80 && !isOverachieved; 
+    
     const lastClean = locLogs.length > 0 ? Math.max(...locLogs.map(l => l.timestamp)) : 0;
     
     // Select name based on language
@@ -80,6 +92,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       count,
       percentage,
       isAtRisk,
+      isOverachieved,
       lastClean
     };
   });
@@ -117,6 +130,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  // Location Edit Handlers
+  const handleStartEditLocation = (loc: Location) => {
+    setEditingLocationId(loc.id);
+    setEditTargetFreq(loc.targetDailyFrequency.toString());
+  }
+
+  const handleSaveLocation = (loc: Location) => {
+    const newTarget = parseInt(editTargetFreq);
+    if (!isNaN(newTarget) && newTarget > 0) {
+      onUpdateLocation({ ...loc, targetDailyFrequency: newTarget });
+    }
+    setEditingLocationId(null);
+  }
+
   const filteredLocations = locationStats.filter(l => 
     l.displayName.toLowerCase().includes(filterText.toLowerCase()) ||
     l.zone.toLowerCase().includes(filterText.toLowerCase())
@@ -150,7 +177,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="w-full bg-slate-100 rounded-full h-2 mt-4">
             <div 
               className="bg-brand-500 h-2 rounded-full transition-all duration-500" 
-              style={{ width: `${overallProgress}%` }}
+              style={{ width: `${Math.min(overallProgress, 100)}%` }}
             ></div>
           </div>
         </div>
@@ -276,7 +303,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {loc.isAtRisk ? (
+                      {loc.isOverachieved ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                           <Trophy size={12} /> {t.overachieved}
+                        </span>
+                      ) : loc.isAtRisk ? (
                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
                             <AlertTriangle size={12} /> {t.behind}
                          </span>
@@ -287,14 +318,42 @@ const Dashboard: React.FC<DashboardProps> = ({
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 bg-slate-100 rounded-full h-1.5">
-                          <div 
-                            className={`h-1.5 rounded-full ${loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'}`} 
-                            style={{ width: `${loc.percentage}%` }}
-                          />
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className={`h-1.5 rounded-full ${
+                                loc.isOverachieved ? 'bg-indigo-500' : 
+                                loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                              }`} 
+                              style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-500 font-medium">{loc.count} / 
+                            {/* Editable Target */}
+                            {editingLocationId === loc.id ? (
+                                <span className="inline-flex items-center ml-1">
+                                  <input 
+                                    type="number" 
+                                    className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                    value={editTargetFreq}
+                                    onChange={(e) => setEditTargetFreq(e.target.value)}
+                                    autoFocus
+                                    onBlur={() => handleSaveLocation(loc)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
+                                  />
+                                </span>
+                            ) : (
+                                <span 
+                                  className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors"
+                                  onClick={() => handleStartEditLocation(loc)}
+                                  title={t.editTarget}
+                                >
+                                   {loc.targetDailyFrequency}
+                                </span>
+                            )}
+                          </span>
                         </div>
-                        <span className="text-xs text-slate-500">{loc.count}/{loc.targetDailyFrequency}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-slate-500">
