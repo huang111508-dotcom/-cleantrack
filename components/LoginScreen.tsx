@@ -132,11 +132,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ cleaners, onLogin, language }
       </div>
 
       <div className="mt-8 text-center flex flex-col items-center gap-1">
-         <span className="text-slate-400 text-xs font-medium bg-slate-200 px-2 py-1 rounded-full">
-            CleanTrack v2.0 (Cloud)
+         <span className="text-brand-600 bg-brand-50 px-3 py-1 rounded-full text-xs font-bold border border-brand-100">
+            CleanTrack System v3.0
          </span>
-         <span className="text-slate-300 text-[10px]">
-           System Operational
+         <span className="text-slate-400 text-[10px] flex items-center gap-1">
+           <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+           Cloud Connected
          </span>
       </div>
     </div>

@@ -191,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              <p className="text-xs text-slate-400">
                {language === 'zh' ? '云端数据实时同步中' : 'Data syncing with cloud'}
              </p>
-             <span className="text-[10px] text-slate-300 font-mono border border-slate-100 px-1 rounded">LIVE</span>
+             <span className="text-[10px] text-brand-600 font-mono bg-brand-50 border border-brand-100 px-1.5 py-0.5 rounded">v3.0 LIVE</span>
            </div>
         </div>
       </div>

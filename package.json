@@ -1,7 +1,7 @@
 {
   "name": "cleantrack-app",
   "private": true,
-  "version": "1.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.32.0",
+    "firebase": "^10.8.0",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.559.0",
     "react": "^19.2.1",

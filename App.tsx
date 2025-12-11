@@ -13,7 +13,7 @@ import {
   updateCleaner,
   seedCleanersIfEmpty,
   clearAllLogs,
-  fetchLogs // Import the new fetch function
+  fetchLogs 
 } from './services/firebase';
 import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud } from 'lucide-react';
 
@@ -27,27 +27,22 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [language, setLanguage] = useState<Language>('zh'); 
 
-  // Cloud Mode State (Default to true as we hardcoded config)
+  // Cloud Mode State
   const [isCloudMode, setIsCloudMode] = useState(true);
 
   const t = TRANSLATIONS[language];
 
   // 1. Initialize System
   useEffect(() => {
-    // Attempt to initialize with hardcoded config
     const cloudInit = initFirebase();
     setIsCloudMode(cloudInit);
 
     if (cloudInit) {
-      // Seed default data if DB is new
       seedCleanersIfEmpty(CLEANERS);
-      
-      // Subscribe to real-time updates
       const unsubLogs = subscribeToLogs((newLogs) => setLogs(newLogs));
       const unsubCleaners = subscribeToCleaners((newCleaners) => setCleanersList(newCleaners));
       return () => { unsubLogs(); unsubCleaners(); };
     } else {
-      // Fallback to local storage
       console.warn("Cloud init failed, falling back to local storage");
       const savedCleaners = localStorage.getItem('cleanersData');
       if (savedCleaners) setCleanersList(JSON.parse(savedCleaners));
@@ -63,7 +58,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 2. Persist Local Data (Backup only)
+  // 2. Persist Local Data
   useEffect(() => {
     if (!isCloudMode && cleanersList.length > 0) {
       localStorage.setItem('cleanersData', JSON.stringify(cleanersList));
@@ -75,7 +70,6 @@ const App: React.FC = () => {
       localStorage.setItem('cleaningLogs', JSON.stringify(logs));
     }
   }, [logs, isCloudMode]);
-
 
   // Actions
   const handleLogin = (role: UserRole, cleaner?: Cleaner) => {
@@ -124,12 +118,10 @@ const App: React.FC = () => {
 
   const handleRefreshData = async () => {
     if (isCloudMode) {
-       // Manual fetch from cloud
        const freshLogs = await fetchLogs();
        setLogs(freshLogs);
        console.log("Manually refreshed logs from cloud");
     } else {
-       // Manual fetch from local storage
        const savedLogs = localStorage.getItem('cleaningLogs');
        if (savedLogs) setLogs(JSON.parse(savedLogs));
     }
@@ -175,7 +167,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 relative">
       
-      {/* GLOBAL: Language Toggle (Top Right) */}
+      {/* GLOBAL: Language Toggle */}
       <div className="fixed top-4 right-4 z-[9999] no-print">
          <button 
             onClick={toggleLanguage}
@@ -203,7 +195,6 @@ const App: React.FC = () => {
                     <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
                       CT
                     </div>
-                    {/* Updated to be visible on mobile as well */}
                     <span className="font-bold text-xl tracking-tight text-slate-800">
                       {t.appTitle}
                     </span>
@@ -211,7 +202,6 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-4">
-                    {/* Cloud status indicator - Now visible on all screens */}
                     <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-50 border border-green-100 text-xs text-green-700 font-medium animate-fade-in">
                       <Cloud size={14} className="text-green-500" />
                       <span className="hidden sm:inline">{language === 'zh' ? '云端在线' : 'Cloud Online'}</span>
