@@ -9,13 +9,13 @@ import {
   Firestore, 
   doc, 
   setDoc,
+  deleteDoc,
   getDocs,
   writeBatch
 } from 'firebase/firestore';
 import { CleaningLog, Cleaner, FirebaseConfig } from '../types';
 
 // Hardcoded configuration provided by user
-// Using this STRICTLY to ensure mobile and PC are on the same DB.
 const DEFAULT_CONFIG: FirebaseOptions = {
   apiKey: "AIzaSyBpnGlzbdVSsMbd7UIDMpznEPx8sk6jqP0",
   authDomain: "cleantrack-demo.firebaseapp.com",
@@ -32,7 +32,6 @@ let db: Firestore | undefined;
 // Initialize Firebase automatically
 export const initFirebase = (): boolean => {
   try {
-    // FORCE usage of DEFAULT_CONFIG to fix sync issues.
     const configToUse = DEFAULT_CONFIG;
 
     if (!getApps().length) {
@@ -132,6 +131,36 @@ export const updateCleaner = async (cleaner: Cleaner) => {
     await setDoc(docRef, cleaner, { merge: true });
   } catch (e) {
     console.error("Error updating cleaner:", e);
+  }
+};
+
+export const addNewCleaner = async (name: string, password: string): Promise<void> => {
+  if (!db) return;
+  try {
+    const newId = `c-${Date.now()}`;
+    // Random avatar selection
+    const avatarId = Math.floor(Math.random() * 70) + 1;
+    const newCleaner: Cleaner = {
+      id: newId,
+      name: name,
+      password: password,
+      avatar: `https://i.pravatar.cc/150?img=${avatarId}` // Using stable avatar service
+    };
+    
+    await setDoc(doc(db, 'cleaners', newId), newCleaner);
+  } catch (e) {
+    console.error("Error adding new cleaner:", e);
+    throw e;
+  }
+};
+
+export const deleteCleaner = async (id: string): Promise<void> => {
+  if (!db) return;
+  try {
+    await deleteDoc(doc(db, 'cleaners', id));
+  } catch (e) {
+    console.error("Error deleting cleaner:", e);
+    throw e;
   }
 };
 

@@ -11,6 +11,8 @@ import {
   subscribeToCleaners, 
   addCleaningLog, 
   updateCleaner,
+  addNewCleaner, // New Import
+  deleteCleaner, // New Import
   seedCleanersIfEmpty,
   clearAllLogs,
   fetchLogs 
@@ -93,6 +95,31 @@ const App: React.FC = () => {
       await updateCleaner(updatedCleaner);
     } else {
       setCleanersList(prev => prev.map(c => c.id === updatedCleaner.id ? updatedCleaner : c));
+    }
+  };
+
+  const handleAddCleaner = async (name: string, password: string) => {
+    if (isCloudMode) {
+      await addNewCleaner(name, password);
+    } else {
+      const newId = `c-${Date.now()}`;
+      const newCleaner = { 
+        id: newId, 
+        name, 
+        password, 
+        avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random()*70)}` 
+      };
+      setCleanersList(prev => [...prev, newCleaner]);
+    }
+  };
+
+  const handleDeleteCleaner = async (id: string) => {
+    if(confirm(language === 'zh' ? '确定要删除该保洁员吗？' : 'Are you sure you want to delete this cleaner?')) {
+      if (isCloudMode) {
+        await deleteCleaner(id);
+      } else {
+        setCleanersList(prev => prev.filter(c => c.id !== id));
+      }
     }
   };
 
@@ -269,6 +296,8 @@ const App: React.FC = () => {
                 logs={logs} 
                 cleaners={cleanersList}
                 onUpdateCleaner={handleUpdateCleaner}
+                onAddCleaner={handleAddCleaner} // New Prop
+                onDeleteCleaner={handleDeleteCleaner} // New Prop
                 language={language}
                 onRefresh={handleRefreshData}
                 isCloudMode={isCloudMode}

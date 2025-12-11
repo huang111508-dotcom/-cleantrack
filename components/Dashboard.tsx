@@ -14,9 +14,11 @@ import {
   Edit,
   Save,
   RotateCw,
-  Cloud,
   Target,
-  Wifi
+  Wifi,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -25,6 +27,8 @@ interface DashboardProps {
   cleaners: Cleaner[];
   language: Language;
   onUpdateCleaner: (updatedCleaner: Cleaner) => void;
+  onAddCleaner: (name: string, password: string) => void;
+  onDeleteCleaner: (id: string) => void;
   onRefresh: () => void;
   isCloudMode: boolean;
 }
@@ -35,13 +39,23 @@ const Dashboard: React.FC<DashboardProps> = ({
   cleaners, 
   language, 
   onUpdateCleaner, 
+  onAddCleaner,
+  onDeleteCleaner,
   onRefresh,
   isCloudMode
 }) => {
   const [analysis, setAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
+  
+  // Edit State
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+
+  // Add State
+  const [isAdding, setIsAdding] = useState(false);
+  const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
   const t = TRANSLATIONS[language];
@@ -81,11 +95,25 @@ const Dashboard: React.FC<DashboardProps> = ({
     setIsAnalyzing(false);
   };
 
-  const handleSavePassword = (cleaner: Cleaner) => {
-    if (newPassword.trim()) {
-      onUpdateCleaner({ ...cleaner, password: newPassword });
+  const handleStartEdit = (c: Cleaner) => {
+    setEditingCleaner(c.id);
+    setEditName(c.name);
+    setEditPassword(c.password || '');
+  };
+
+  const handleSaveEdit = (c: Cleaner) => {
+    if (editName.trim() && editPassword.trim()) {
+      onUpdateCleaner({ ...c, name: editName, password: editPassword });
       setEditingCleaner(null);
+    }
+  };
+
+  const handleConfirmAdd = () => {
+    if (newName.trim() && newPassword.trim()) {
+      onAddCleaner(newName, newPassword);
+      setNewName('');
       setNewPassword('');
+      setIsAdding(false);
     }
   };
 
@@ -168,7 +196,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </p>
         </div>
 
-        {/* Card 4: System Status (Updated visual style to White Theme) */}
+        {/* Card 4: System Status */}
          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
            <div className="flex items-center justify-between">
             <div>
@@ -291,46 +319,116 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Team Management */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5 text-brand-500" />
-              {t.teamManagement}
-            </h2>
-            <div className="space-y-3">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Users className="w-5 h-5 text-brand-500" />
+                {t.teamManagement}
+              </h2>
+              <button 
+                onClick={() => setIsAdding(!isAdding)}
+                className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors border border-transparent hover:border-brand-100"
+                title="Add Cleaner"
+              >
+                {isAdding ? <X size={20} className="text-slate-400" /> : <Plus size={20} />}
+              </button>
+            </div>
+
+            {/* Add New Cleaner Form */}
+            {isAdding && (
+              <div className="bg-brand-50 p-3 rounded-lg mb-4 border border-brand-100 animate-fade-in">
+                <p className="text-xs font-bold text-brand-700 mb-2">
+                  {language === 'zh' ? '添加新保洁员' : 'Add New Cleaner'}
+                </p>
+                <div className="space-y-2">
+                  <input 
+                    type="text" 
+                    placeholder={language === 'zh' ? '姓名' : 'Name'}
+                    className="w-full text-xs p-2 border border-slate-200 rounded focus:ring-2 focus:ring-brand-500 outline-none"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder={language === 'zh' ? '设置密码' : 'Set Password'}
+                    className="w-full text-xs p-2 border border-slate-200 rounded focus:ring-2 focus:ring-brand-500 outline-none"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                  />
+                  <button 
+                    onClick={handleConfirmAdd}
+                    className="w-full bg-brand-600 text-white text-xs font-bold py-2 rounded hover:bg-brand-700"
+                  >
+                    {language === 'zh' ? '确认添加' : 'Confirm Add'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
               {cleaners.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <img src={c.avatar} className="w-8 h-8 rounded-full bg-white" alt={c.name} />
-                    <div className="text-sm">
-                      <p className="font-bold text-slate-700">{c.name}</p>
-                      <p className="text-xs text-slate-400">Pass: {editingCleaner === c.id ? '****' : c.password}</p>
-                    </div>
-                  </div>
+                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 group">
                   {editingCleaner === c.id ? (
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="text" 
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="New Pass"
-                        className="w-24 text-xs p-1 border rounded"
-                      />
-                      <button 
-                        onClick={() => handleSavePassword(c)}
-                        className="p-1 text-green-600 hover:bg-green-100 rounded"
-                      >
-                        <Save size={16} />
-                      </button>
+                    // EDIT MODE
+                    <div className="flex flex-col gap-2 w-full">
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 text-xs p-1.5 border rounded"
+                          placeholder="Name"
+                        />
+                        <input 
+                          type="text" 
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          className="w-20 text-xs p-1.5 border rounded"
+                          placeholder="Pass"
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => setEditingCleaner(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1">Cancel</button>
+                        <button onClick={() => handleSaveEdit(c)} className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 flex items-center gap-1">
+                          <Save size={12} /> Save
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <button 
-                      onClick={() => { setEditingCleaner(c.id); setNewPassword(c.password || ''); }}
-                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-white rounded transition-colors"
-                    >
-                      <Edit size={16} />
-                    </button>
+                    // VIEW MODE
+                    <>
+                      <div className="flex items-center gap-3">
+                        <img src={c.avatar} className="w-8 h-8 rounded-full bg-white border border-slate-200" alt={c.name} />
+                        <div className="text-sm">
+                          <p className="font-bold text-slate-700">{c.name}</p>
+                          <p className="text-xs text-slate-400">Pass: {c.password}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleStartEdit(c)}
+                          className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-white rounded transition-colors"
+                          title="Edit"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => onDeleteCleaner(c.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-white rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
+              
+              {cleaners.length === 0 && (
+                <div className="text-center py-4 text-slate-400 text-xs italic">
+                  No cleaners found. Click + to add.
+                </div>
+              )}
             </div>
           </div>
           

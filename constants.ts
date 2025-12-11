@@ -1,6 +1,7 @@
 import { Cleaner, Location, CleaningLog } from './types';
 
-export const DEFAULT_MANAGER_PASSWORD = "admin";
+// Updated Manager Password
+export const DEFAULT_MANAGER_PASSWORD = "admin888";
 
 export const CLEANERS: Cleaner[] = [
   { id: 'c1', name: 'John Doe', avatar: 'https://picsum.photos/100/100?random=1', password: '123' },
@@ -33,7 +34,7 @@ export const LOCATIONS: Location[] = [
 
 export const TRANSLATIONS = {
   en: {
-    appTitle: "CleanTrack",
+    appTitle: "A03 CleanTrack",
     manager: "Manager",
     cleanerApp: "Cleaner App",
     qrCodes: "Print QR Codes",
@@ -87,7 +88,7 @@ export const TRANSLATIONS = {
     resetConfirm: "Are you sure you want to clear ALL cleaning logs? This cannot be undone.",
   },
   zh: {
-    appTitle: "保洁追踪系统",
+    appTitle: "龙城店保洁追踪系统",
     manager: "管理端",
     cleanerApp: "保洁员端",
     qrCodes: "打印二维码",
