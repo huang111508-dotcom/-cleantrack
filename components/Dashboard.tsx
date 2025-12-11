@@ -15,7 +15,8 @@ import {
   Save,
   RotateCw,
   Cloud,
-  Target
+  Target,
+  Wifi
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -183,12 +184,15 @@ const Dashboard: React.FC<DashboardProps> = ({
               </h3>
             </div>
             <div className="p-3 rounded-full bg-green-50 text-green-600">
-               <Cloud size={24} />
+               <Wifi size={24} />
             </div>
           </div>
-           <p className="text-xs text-slate-400 mt-2">
-             {language === 'zh' ? '云端数据实时同步中' : 'Data syncing with cloud'}
-           </p>
+           <div className="flex items-center justify-between mt-2">
+             <p className="text-xs text-slate-400">
+               {language === 'zh' ? '云端数据实时同步中' : 'Data syncing with cloud'}
+             </p>
+             <span className="text-[10px] text-slate-300 font-mono border border-slate-100 px-1 rounded">LIVE</span>
+           </div>
         </div>
       </div>
 

@@ -203,22 +203,23 @@ const App: React.FC = () => {
                     <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
                       CT
                     </div>
-                    <span className="font-bold text-xl tracking-tight text-slate-800 hidden sm:block">
+                    {/* Updated to be visible on mobile as well */}
+                    <span className="font-bold text-xl tracking-tight text-slate-800">
                       {t.appTitle}
                     </span>
-                    <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded border border-slate-200 uppercase font-bold">Manager</span>
+                    <span className="ml-1 text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">v2.0</span>
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-4">
-                    {/* Cloud status indicator */}
-                    <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-green-50 border border-green-100 text-xs text-green-700 font-medium">
+                    {/* Cloud status indicator - Now visible on all screens */}
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-50 border border-green-100 text-xs text-green-700 font-medium animate-fade-in">
                       <Cloud size={14} className="text-green-500" />
-                      {language === 'zh' ? '云端在线' : 'Cloud Online'}
+                      <span className="hidden sm:inline">{language === 'zh' ? '云端在线' : 'Cloud Online'}</span>
                     </div>
 
                     <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
 
-                    <div className="flex bg-slate-100 rounded-lg p-1">
+                    <div className="flex bg-slate-100 rounded-lg p-1 hidden sm:flex">
                       <button
                         onClick={() => setView('dashboard')}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
