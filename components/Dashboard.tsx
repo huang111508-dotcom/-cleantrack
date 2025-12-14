@@ -19,7 +19,8 @@ import {
   Plus,
   Trash2,
   X,
-  Trophy // New icon for Overachieved
+  Trophy,
+  Calendar
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -28,7 +29,7 @@ interface DashboardProps {
   cleaners: Cleaner[];
   language: Language;
   onUpdateCleaner: (updatedCleaner: Cleaner) => void;
-  onUpdateLocation: (updatedLocation: Location) => void; // New prop
+  onUpdateLocation: (updatedLocation: Location) => void; 
   onAddCleaner: (name: string, password: string) => void;
   onDeleteCleaner: (id: string) => void;
   onRefresh: () => void;
@@ -47,49 +48,67 @@ const Dashboard: React.FC<DashboardProps> = ({
   onRefresh,
   isCloudMode
 }) => {
+  const t = TRANSLATIONS[language];
+  
+  // -- Date Filter State --
+  // Initialize with local date string YYYY-MM-DD
+  const getTodayStr = () => {
+    const d = new Date();
+    // Offset for local timezone correct conversion
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().split('T')[0];
+  };
+
+  const [startDate, setStartDate] = useState<string>(getTodayStr());
+  const [endDate, setEndDate] = useState<string>(getTodayStr());
+
+  // -- Existing State --
   const [analysis, setAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
-  
-  // Cleaner Edit State
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
-
-  // Location Target Edit State (New)
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [editTargetFreq, setEditTargetFreq] = useState<string>('');
-
-  // Add Cleaner State
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const t = TRANSLATIONS[language];
+  // -- Date Logic Calculations --
+  const startTs = new Date(startDate).setHours(0, 0, 0, 0);
+  const endTs = new Date(endDate).setHours(23, 59, 59, 999);
+  
+  // Calculate number of days in range to scale targets
+  // Ensure at least 1 day
+  const oneDay = 1000 * 60 * 60 * 24;
+  const daysDiff = Math.max(1, Math.round((endTs - startTs) / oneDay));
 
-  // Calculate statistics
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todaysLogs = logs.filter(l => l.timestamp >= todayStart);
+  // Filter logs by date range
+  const filteredLogs = logs.filter(l => l.timestamp >= startTs && l.timestamp <= endTs);
 
   const locationStats = locations.map(loc => {
-    const locLogs = todaysLogs.filter(l => l.locationId === loc.id);
+    const locLogs = filteredLogs.filter(l => l.locationId === loc.id);
     const count = locLogs.length;
-    // Cap percentage visual at 100 for the bar, but logic allows > 100
-    const percentage = Math.round((count / loc.targetDailyFrequency) * 100);
+    
+    // Scale target based on selected days
+    const periodTarget = loc.targetDailyFrequency * daysDiff;
+
+    const percentage = Math.round((count / periodTarget) * 100);
     
     // Status Logic
-    const isOverachieved = count > loc.targetDailyFrequency;
-    const isAtRisk = percentage < 80 && !isOverachieved; 
+    const isOverachieved = count > periodTarget;
+    // Only flag as atRisk if strictly less than 80%
+    const isAtRisk = percentage < 80; 
     
     const lastClean = locLogs.length > 0 ? Math.max(...locLogs.map(l => l.timestamp)) : 0;
-    
-    // Select name based on language
     const displayName = language === 'zh' ? loc.nameZh : loc.nameEn;
 
     return {
       ...loc,
       displayName,
       count,
+      periodTarget, // Scaled target
       percentage,
       isAtRisk,
       isOverachieved,
@@ -97,13 +116,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
   });
 
-  const totalTarget = locations.reduce((acc, curr) => acc + curr.targetDailyFrequency, 0);
-  const totalCleaned = todaysLogs.length;
-  const overallProgress = Math.round((totalCleaned / totalTarget) * 100);
+  const totalTarget = locationStats.reduce((acc, curr) => acc + curr.periodTarget, 0);
+  const totalCleaned = filteredLogs.length;
+  // Prevent division by zero
+  const overallProgress = totalTarget > 0 ? Math.round((totalCleaned / totalTarget) * 100) : 0;
 
   const handleRunAnalysis = async () => {
     setIsAnalyzing(true);
-    const result = await analyzeCleaningData(logs, locations, language);
+    // Note: We pass the *filtered* logs to AI for relevant analysis
+    const result = await analyzeCleaningData(filteredLogs, locations, language);
     setAnalysis(result);
     setIsAnalyzing(false);
   };
@@ -130,7 +151,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Location Edit Handlers
   const handleStartEditLocation = (loc: Location) => {
     setEditingLocationId(loc.id);
     setEditTargetFreq(loc.targetDailyFrequency.toString());
@@ -143,6 +163,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     setEditingLocationId(null);
   }
+  
+  const handleResetDate = () => {
+    const today = getTodayStr();
+    setStartDate(today);
+    setEndDate(today);
+  }
 
   const filteredLocations = locationStats.filter(l => 
     l.displayName.toLowerCase().includes(filterText.toLowerCase()) ||
@@ -151,14 +177,61 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <div className="flex justify-end lg:hidden">
-         <button 
-           onClick={onRefresh}
-           className="flex items-center gap-1 text-sm text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full font-medium"
-         >
-           <RotateCw size={14} />
-           {language === 'zh' ? '刷新数据' : 'Refresh'}
-         </button>
+      
+      {/* --- Filter Bar (New) --- */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center w-full">
+            <div className="flex items-center gap-2 text-slate-700 font-bold">
+               <Calendar size={20} className="text-brand-500" />
+               <span>{t.dateRange}</span>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full md:w-auto">
+               <div className="flex flex-col">
+                  <label className="text-[10px] text-slate-400 font-medium uppercase">{t.startDate}</label>
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                  />
+               </div>
+               <span className="text-slate-300 mt-4">-</span>
+               <div className="flex flex-col">
+                  <label className="text-[10px] text-slate-400 font-medium uppercase">{t.endDate}</label>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                  />
+               </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+               {daysDiff > 1 && (
+                 <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold border border-indigo-100">
+                   {daysDiff} {t.days}
+                 </span>
+               )}
+               <button 
+                 onClick={handleResetDate}
+                 className="text-xs text-slate-500 hover:text-brand-600 underline"
+               >
+                 {t.resetDate}
+               </button>
+            </div>
+         </div>
+
+         <div className="flex items-center gap-2 justify-end">
+            <button 
+              onClick={onRefresh}
+              className="flex items-center gap-1 text-sm text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg font-medium transition-colors"
+            >
+              <RotateCw size={14} />
+              <span className="hidden md:inline">{language === 'zh' ? '刷新' : 'Refresh'}</span>
+            </button>
+         </div>
       </div>
 
       {/* Top Stats Cards */}
@@ -205,7 +278,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 font-medium">
-                {language === 'zh' ? '今日清洁进度' : 'Today\'s Progress'}
+                {t.totalCleanings}
               </p>
               <h3 className="text-2xl font-bold text-slate-800 flex items-baseline gap-1">
                 <span>{totalCleaned}</span>
@@ -272,13 +345,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                   onChange={(e) => setFilterText(e.target.value)}
                 />
               </div>
-              <button 
-                onClick={onRefresh}
-                className="hidden sm:flex p-2 text-slate-400 hover:text-brand-600 bg-slate-50 hover:bg-brand-50 rounded-lg transition-colors"
-                title={language === 'zh' ? '刷新数据' : 'Refresh Data'}
-              >
-                <RotateCw size={18} />
-              </button>
             </div>
           </div>
           
@@ -329,28 +395,32 @@ const Dashboard: React.FC<DashboardProps> = ({
                               style={{ width: `${Math.min(loc.percentage, 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-slate-500 font-medium">{loc.count} / 
-                            {/* Editable Target */}
-                            {editingLocationId === loc.id ? (
-                                <span className="inline-flex items-center ml-1">
-                                  <input 
-                                    type="number" 
-                                    className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                    value={editTargetFreq}
-                                    onChange={(e) => setEditTargetFreq(e.target.value)}
-                                    autoFocus
-                                    onBlur={() => handleSaveLocation(loc)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
-                                  />
-                                </span>
-                            ) : (
-                                <span 
-                                  className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors"
-                                  onClick={() => handleStartEditLocation(loc)}
-                                  title={t.editTarget}
-                                >
-                                   {loc.targetDailyFrequency}
-                                </span>
+                          <span className="text-xs text-slate-500 font-medium">
+                            {loc.count} / {loc.periodTarget}
+                            
+                            {/* Editable Target Icon (Only show if viewing 1 day) */}
+                            {daysDiff === 1 && (
+                                editingLocationId === loc.id ? (
+                                    <span className="inline-flex items-center ml-1">
+                                    <input 
+                                        type="number" 
+                                        className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                        value={editTargetFreq}
+                                        onChange={(e) => setEditTargetFreq(e.target.value)}
+                                        autoFocus
+                                        onBlur={() => handleSaveLocation(loc)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
+                                    />
+                                    </span>
+                                ) : (
+                                    <span 
+                                    className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
+                                    onClick={() => handleStartEditLocation(loc)}
+                                    title={t.editTarget}
+                                    >
+                                    <Edit size={10} />
+                                    </span>
+                                )
                             )}
                           </span>
                         </div>
@@ -358,9 +428,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </td>
                     <td className="px-6 py-4 text-slate-500">
                       {loc.lastClean > 0 ? (
-                         <span className="flex items-center gap-1">
+                         <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
                            <Clock size={12} />
                            {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                           {/* Add date if displaying range > 1 day */}
+                           {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
                          </span>
                       ) : (
                         <span className="text-slate-400 italic">--</span>

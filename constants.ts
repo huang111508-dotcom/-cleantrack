@@ -41,13 +41,13 @@ export const TRANSLATIONS = {
     qrCodes: "Print QR Codes",
     reset: "Reset Data (Clear All)",
     export: "Export Excel",
-    dailyCompliance: "Daily Compliance",
-    activeIssues: "Active Issues",
-    totalCleanings: "Total Cleanings",
+    dailyCompliance: "Compliance Rate",
+    activeIssues: "Issues",
+    totalCleanings: "Cleanings",
     runAnalysis: "Run Operations Analysis",
     analyzing: "Analyzing patterns...",
     analysisPrompt: "Click 'Run Analysis' to generate an executive summary.",
-    liveStatus: "Live Location Status",
+    liveStatus: "Location Status",
     search: "Search zones...",
     location: "Location",
     zone: "Zone",
@@ -58,7 +58,7 @@ export const TRANSLATIONS = {
     cleaned: "cleaned",
     onTrack: "On Track",
     behind: "Behind",
-    overachieved: "Overachieved", // New
+    overachieved: "Overachieved",
     confirmLocation: "Confirm Location",
     scannedCodeFor: "Scanned Location:",
     completeTask: "Complete Task",
@@ -88,8 +88,14 @@ export const TRANSLATIONS = {
     save: "Save",
     teamManagement: "Team Management",
     resetConfirm: "Are you sure you want to clear ALL cleaning logs? This cannot be undone.",
-    editTarget: "Edit Target", // New
-    target: "Target", // New
+    editTarget: "Edit Target",
+    target: "Target",
+    startDate: "Start Date", // New
+    endDate: "End Date", // New
+    dateRange: "Date Range", // New
+    today: "Today", // New
+    resetDate: "Reset to Today", // New
+    days: "Days", // New
   },
   zh: {
     appTitle: "龙城店保洁追踪系统",
@@ -98,24 +104,24 @@ export const TRANSLATIONS = {
     qrCodes: "打印二维码",
     reset: "清空重置数据",
     export: "导出表格",
-    dailyCompliance: "今日达标率",
-    activeIssues: "异常点位",
-    totalCleanings: "总打卡次数",
+    dailyCompliance: "区间达标率",
+    activeIssues: "异常/落后",
+    totalCleanings: "打卡总数",
     runAnalysis: "生成运营分析报告",
     analyzing: "正在分析数据...",
     analysisPrompt: "点击“生成运营分析报告”以获取今日清洁状况摘要。",
-    liveStatus: "实时点位状态",
+    liveStatus: "点位统计状态",
     search: "搜索区域...",
     location: "点位名称",
     zone: "区域",
     status: "状态",
     progress: "进度",
-    lastCleaned: "上次打卡",
+    lastCleaned: "最近一次打卡",
     recentActivity: "最近动态",
     cleaned: "已清洁",
     onTrack: "正常",
     behind: "异常/落后",
-    overachieved: "超额完成", // New
+    overachieved: "超额完成",
     confirmLocation: "确认打卡点位",
     scannedCodeFor: "已扫描点位：",
     completeTask: "确认打卡",
@@ -145,8 +151,14 @@ export const TRANSLATIONS = {
     save: "保存",
     teamManagement: "保洁员账号管理",
     resetConfirm: "确定要清空所有历史打卡记录吗？此操作不可恢复。",
-    editTarget: "修改目标", // New
-    target: "目标次数", // New
+    editTarget: "修改目标",
+    target: "目标次数",
+    startDate: "开始日期", // New
+    endDate: "结束日期", // New
+    dateRange: "选择日期范围", // New
+    today: "今天", // New
+    resetDate: "重置为今天", // New
+    days: "天", // New
   }
 };
 
