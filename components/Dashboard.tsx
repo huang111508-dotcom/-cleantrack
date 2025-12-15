@@ -20,7 +20,10 @@ import {
   Trash2,
   X,
   Trophy,
-  Calendar
+  Calendar,
+  ChevronDown, // New
+  ChevronUp,   // New
+  History      // New
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -51,10 +54,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const t = TRANSLATIONS[language];
   
   // -- Date Filter State --
-  // Initialize with local date string YYYY-MM-DD
   const getTodayStr = () => {
     const d = new Date();
-    // Offset for local timezone correct conversion
     const offset = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
   };
@@ -66,6 +67,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [analysis, setAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
+  
+  // -- Expansion State (New) --
+  const [expandedLocationId, setExpandedLocationId] = useState<string | null>(null);
+
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -79,8 +84,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const startTs = new Date(startDate).setHours(0, 0, 0, 0);
   const endTs = new Date(endDate).setHours(23, 59, 59, 999);
   
-  // Calculate number of days in range to scale targets
-  // Ensure at least 1 day
   const oneDay = 1000 * 60 * 60 * 24;
   const daysDiff = Math.max(1, Math.round((endTs - startTs) / oneDay));
 
@@ -91,14 +94,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     const locLogs = filteredLogs.filter(l => l.locationId === loc.id);
     const count = locLogs.length;
     
-    // Scale target based on selected days
     const periodTarget = loc.targetDailyFrequency * daysDiff;
-
     const percentage = Math.round((count / periodTarget) * 100);
     
-    // Status Logic
     const isOverachieved = count > periodTarget;
-    // Only flag as atRisk if strictly less than 80%
     const isAtRisk = percentage < 80; 
     
     const lastClean = locLogs.length > 0 ? Math.max(...locLogs.map(l => l.timestamp)) : 0;
@@ -108,22 +107,21 @@ const Dashboard: React.FC<DashboardProps> = ({
       ...loc,
       displayName,
       count,
-      periodTarget, // Scaled target
+      periodTarget,
       percentage,
       isAtRisk,
       isOverachieved,
-      lastClean
+      lastClean,
+      logs: locLogs.sort((a, b) => b.timestamp - a.timestamp) // Sort specifically for detail view
     };
   });
 
   const totalTarget = locationStats.reduce((acc, curr) => acc + curr.periodTarget, 0);
   const totalCleaned = filteredLogs.length;
-  // Prevent division by zero
   const overallProgress = totalTarget > 0 ? Math.round((totalCleaned / totalTarget) * 100) : 0;
 
   const handleRunAnalysis = async () => {
     setIsAnalyzing(true);
-    // Note: We pass the *filtered* logs to AI for relevant analysis
     const result = await analyzeCleaningData(filteredLogs, locations, language);
     setAnalysis(result);
     setIsAnalyzing(false);
@@ -151,7 +149,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleStartEditLocation = (loc: Location) => {
+  const handleStartEditLocation = (e: React.MouseEvent, loc: Location) => {
+    e.stopPropagation(); // Prevent row toggle
     setEditingLocationId(loc.id);
     setEditTargetFreq(loc.targetDailyFrequency.toString());
   }
@@ -170,6 +169,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     setEndDate(today);
   }
 
+  const toggleRow = (id: string) => {
+    setExpandedLocationId(prev => prev === id ? null : id);
+  };
+
   const filteredLocations = locationStats.filter(l => 
     l.displayName.toLowerCase().includes(filterText.toLowerCase()) ||
     l.zone.toLowerCase().includes(filterText.toLowerCase())
@@ -178,7 +181,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       
-      {/* --- Filter Bar (New) --- */}
+      {/* --- Filter Bar --- */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center w-full">
             <div className="flex items-center gap-2 text-slate-700 font-bold">
@@ -357,88 +360,158 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <th className="px-6 py-4">{t.status}</th>
                   <th className="px-6 py-4">{t.progress}</th>
                   <th className="px-6 py-4">{t.lastCleaned}</th>
+                  <th className="w-8 px-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredLocations.map((loc) => (
-                  <tr key={loc.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-800">{loc.displayName}</td>
-                    <td className="px-6 py-4 text-slate-500">
-                      <span className="px-2 py-1 bg-slate-100 rounded text-xs">
-                        {loc.zone}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {loc.isOverachieved ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                           <Trophy size={12} /> {t.overachieved}
+                  <React.Fragment key={loc.id}>
+                    <tr 
+                      onClick={() => toggleRow(loc.id)} 
+                      className={`transition-colors cursor-pointer group ${expandedLocationId === loc.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
+                    >
+                      <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-2">
+                         {loc.displayName}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500">
+                        <span className="px-2 py-1 bg-slate-100 rounded text-xs">
+                          {loc.zone}
                         </span>
-                      ) : loc.isAtRisk ? (
-                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
-                            <AlertTriangle size={12} /> {t.behind}
-                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-600">
-                           <CheckCircle size={12} /> {t.onTrack}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className={`h-1.5 rounded-full ${
-                                loc.isOverachieved ? 'bg-indigo-500' : 
-                                loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
-                              }`} 
-                              style={{ width: `${Math.min(loc.percentage, 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-slate-500 font-medium">
-                            {loc.count} / {loc.periodTarget}
-                            
-                            {/* Editable Target Icon (Only show if viewing 1 day) */}
-                            {daysDiff === 1 && (
-                                editingLocationId === loc.id ? (
-                                    <span className="inline-flex items-center ml-1">
-                                    <input 
-                                        type="number" 
-                                        className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                        value={editTargetFreq}
-                                        onChange={(e) => setEditTargetFreq(e.target.value)}
-                                        autoFocus
-                                        onBlur={() => handleSaveLocation(loc)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
-                                    />
-                                    </span>
-                                ) : (
-                                    <span 
-                                    className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
-                                    onClick={() => handleStartEditLocation(loc)}
-                                    title={t.editTarget}
-                                    >
-                                    <Edit size={10} />
-                                    </span>
-                                )
-                            )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {loc.isOverachieved ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                             <Trophy size={12} /> {t.overachieved}
                           </span>
+                        ) : loc.isAtRisk ? (
+                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
+                              <AlertTriangle size={12} /> {t.behind}
+                           </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-600">
+                             <CheckCircle size={12} /> {t.onTrack}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className={`h-1.5 rounded-full ${
+                                  loc.isOverachieved ? 'bg-indigo-500' : 
+                                  loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                                }`} 
+                                style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 font-medium">
+                              {loc.count} / {loc.periodTarget}
+                              
+                              {/* Editable Target Icon (Only show if viewing 1 day) */}
+                              {daysDiff === 1 && (
+                                  editingLocationId === loc.id ? (
+                                      <span className="inline-flex items-center ml-1" onClick={e => e.stopPropagation()}>
+                                      <input 
+                                          type="number" 
+                                          className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                          value={editTargetFreq}
+                                          onChange={(e) => setEditTargetFreq(e.target.value)}
+                                          autoFocus
+                                          onBlur={() => handleSaveLocation(loc)}
+                                          onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
+                                      />
+                                      </span>
+                                  ) : (
+                                      <span 
+                                      className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
+                                      onClick={(e) => handleStartEditLocation(e, loc)}
+                                      title={t.editTarget}
+                                      >
+                                      <Edit size={10} />
+                                      </span>
+                                  )
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-500">
-                      {loc.lastClean > 0 ? (
-                         <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
-                           <Clock size={12} />
-                           {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                           {/* Add date if displaying range > 1 day */}
-                           {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
-                         </span>
-                      ) : (
-                        <span className="text-slate-400 italic">--</span>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {loc.lastClean > 0 ? (
+                           <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
+                             <Clock size={12} />
+                             {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                             {/* Add date if displaying range > 1 day */}
+                             {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
+                           </span>
+                        ) : (
+                          <span className="text-slate-400 italic">--</span>
+                        )}
+                      </td>
+                      <td className="px-2">
+                         {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
+                      </td>
+                    </tr>
+                    
+                    {/* Expanded Detail View */}
+                    {expandedLocationId === loc.id && (
+                      <tr className="bg-slate-50 border-b border-slate-100 shadow-inner">
+                        <td colSpan={6} className="p-0">
+                           <div className="px-6 py-4 animate-fade-in">
+                             <div className="flex items-center gap-2 mb-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                <History size={14} />
+                                {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
+                             </div>
+                             
+                             {loc.logs.length > 0 ? (
+                               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                                 <table className="w-full text-xs">
+                                   <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                      <tr>
+                                        <th className="px-4 py-2 text-left">{language === 'zh' ? '时间' : 'Time'}</th>
+                                        <th className="px-4 py-2 text-left">{language === 'zh' ? '保洁员' : 'Cleaner'}</th>
+                                        <th className="px-4 py-2 text-right">{language === 'zh' ? '状态' : 'Status'}</th>
+                                      </tr>
+                                   </thead>
+                                   <tbody className="divide-y divide-slate-100">
+                                      {loc.logs.map(log => {
+                                        const cleaner = cleaners.find(c => c.id === log.cleanerId);
+                                        return (
+                                          <tr key={log.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-2.5 font-mono text-slate-600">
+                                               {new Date(log.timestamp).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                                            </td>
+                                            <td className="px-4 py-2.5 flex items-center gap-2">
+                                               {cleaner ? (
+                                                 <>
+                                                   <img src={cleaner.avatar} className="w-5 h-5 rounded-full" />
+                                                   <span className="font-medium text-slate-700">{cleaner.name}</span>
+                                                 </>
+                                               ) : (
+                                                 <span className="text-slate-400">Unknown</span>
+                                               )}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right">
+                                              <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                                                <CheckCircle size={10} /> Completed
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                   </tbody>
+                                 </table>
+                               </div>
+                             ) : (
+                               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
+                                  {language === 'zh' ? '该时间段内无打卡记录' : 'No records found for this period.'}
+                               </div>
+                             )}
+                           </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
