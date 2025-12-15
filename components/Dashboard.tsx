@@ -21,9 +21,9 @@ import {
   X,
   Trophy,
   Calendar,
-  ChevronDown, // New
-  ChevronUp,   // New
-  History      // New
+  ChevronDown,
+  ChevronUp,
+  History
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -68,7 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [filterText, setFilterText] = useState('');
   
-  // -- Expansion State (New) --
+  // -- Expansion State --
   const [expandedLocationId, setExpandedLocationId] = useState<string | null>(null);
 
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
@@ -178,129 +178,197 @@ const Dashboard: React.FC<DashboardProps> = ({
     l.zone.toLowerCase().includes(filterText.toLowerCase())
   );
 
+  // Helper for status badge
+  const renderStatusBadge = (loc: any) => {
+    if (loc.isOverachieved) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+           <Trophy size={12} /> {t.overachieved}
+        </span>
+      );
+    }
+    if (loc.isAtRisk) {
+      return (
+         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600">
+            <AlertTriangle size={12} /> {t.behind}
+         </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600">
+         <CheckCircle size={12} /> {t.onTrack}
+      </span>
+    );
+  };
+
+  // Helper for expanded log view
+  const renderLogDetails = (loc: any) => (
+    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 animate-fade-in">
+       <div className="flex items-center gap-2 mb-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <History size={14} />
+          {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
+       </div>
+       
+       {loc.logs.length > 0 ? (
+         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+           <table className="w-full text-xs">
+             <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
+                <tr>
+                  <th className="px-3 py-2 text-left">{language === 'zh' ? '时间' : 'Time'}</th>
+                  <th className="px-3 py-2 text-left">{language === 'zh' ? '保洁员' : 'Cleaner'}</th>
+                  <th className="px-3 py-2 text-right">{language === 'zh' ? '状态' : 'Status'}</th>
+                </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100">
+                {loc.logs.map((log: any) => {
+                  const cleaner = cleaners.find(c => c.id === log.cleanerId);
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2.5 font-mono text-slate-600">
+                         {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                         {daysDiff > 1 && <span className="text-[10px] text-slate-400 block sm:inline sm:ml-1">{new Date(log.timestamp).getMonth()+1}/{new Date(log.timestamp).getDate()}</span>}
+                      </td>
+                      <td className="px-3 py-2.5 flex items-center gap-2">
+                         {cleaner ? (
+                           <>
+                             <img src={cleaner.avatar} className="w-5 h-5 rounded-full" />
+                             <span className="font-medium text-slate-700">{cleaner.name}</span>
+                           </>
+                         ) : (
+                           <span className="text-slate-400">Unknown</span>
+                         )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                          <CheckCircle size={10} /> Ok
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+             </tbody>
+           </table>
+         </div>
+       ) : (
+         <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
+            {language === 'zh' ? '该时间段内无打卡记录' : 'No records found for this period.'}
+         </div>
+       )}
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       
       {/* --- Filter Bar --- */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center w-full">
-            <div className="flex items-center gap-2 text-slate-700 font-bold">
+            <div className="flex items-center gap-2 text-slate-700 font-bold mb-2 md:mb-0">
                <Calendar size={20} className="text-brand-500" />
                <span>{t.dateRange}</span>
             </div>
             
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            {/* Date Inputs - Optimized for Mobile */}
+            <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:items-center">
                <div className="flex flex-col">
-                  <label className="text-[10px] text-slate-400 font-medium uppercase">{t.startDate}</label>
+                  <label className="text-[10px] text-slate-400 font-medium uppercase mb-1">{t.startDate}</label>
                   <input 
                     type="date" 
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                </div>
-               <span className="text-slate-300 mt-4">-</span>
                <div className="flex flex-col">
-                  <label className="text-[10px] text-slate-400 font-medium uppercase">{t.endDate}</label>
+                  <label className="text-[10px] text-slate-400 font-medium uppercase mb-1">{t.endDate}</label>
                   <input 
                     type="date" 
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
                   />
                </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-2 md:mt-0">
                {daysDiff > 1 && (
-                 <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold border border-indigo-100">
+                 <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold border border-indigo-100 whitespace-nowrap">
                    {daysDiff} {t.days}
                  </span>
                )}
                <button 
                  onClick={handleResetDate}
-                 className="text-xs text-slate-500 hover:text-brand-600 underline"
+                 className="text-xs text-slate-500 hover:text-brand-600 underline whitespace-nowrap ml-auto md:ml-0"
                >
                  {t.resetDate}
                </button>
             </div>
          </div>
 
-         <div className="flex items-center gap-2 justify-end">
+         <div className="flex items-center gap-2 justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-50 mt-2 md:mt-0 w-full md:w-auto">
             <button 
               onClick={onRefresh}
-              className="flex items-center gap-1 text-sm text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg font-medium transition-colors"
+              className="w-full md:w-auto flex items-center justify-center gap-1 text-sm text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-lg font-medium transition-colors"
             >
               <RotateCw size={14} />
-              <span className="hidden md:inline">{language === 'zh' ? '刷新' : 'Refresh'}</span>
+              <span>{language === 'zh' ? '刷新数据' : 'Refresh Data'}</span>
             </button>
          </div>
       </div>
 
       {/* Top Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {/* Card 1: Compliance */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500 font-medium">{t.dailyCompliance}</p>
-              <h3 className="text-2xl font-bold text-slate-800">{overallProgress}%</h3>
-            </div>
-            <div className="p-3 bg-brand-50 text-brand-600 rounded-full">
-              <CheckCircle size={24} />
+        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs md:text-sm text-slate-500 font-medium">{t.dailyCompliance}</p>
+            <div className="p-2 md:p-3 bg-brand-50 text-brand-600 rounded-full">
+              <CheckCircle size={20} className="md:w-6 md:h-6" />
             </div>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-2 mt-4">
+          <h3 className="text-xl md:text-2xl font-bold text-slate-800">{overallProgress}%</h3>
+          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
             <div 
-              className="bg-brand-500 h-2 rounded-full transition-all duration-500" 
+              className="bg-brand-500 h-1.5 rounded-full transition-all duration-500" 
               style={{ width: `${Math.min(overallProgress, 100)}%` }}
             ></div>
           </div>
         </div>
 
         {/* Card 2: Issues */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500 font-medium">{t.activeIssues}</p>
-              <h3 className="text-2xl font-bold text-red-500">
-                {locationStats.filter(l => l.isAtRisk).length}
-              </h3>
-            </div>
-            <div className="p-3 bg-red-50 text-red-500 rounded-full">
-              <AlertTriangle size={24} />
+        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs md:text-sm text-slate-500 font-medium">{t.activeIssues}</p>
+            <div className="p-2 md:p-3 bg-red-50 text-red-500 rounded-full">
+              <AlertTriangle size={20} className="md:w-6 md:h-6" />
             </div>
           </div>
-          <p className="text-xs text-slate-400 mt-2">
-             {language === 'zh' ? '进度低于80%的点位' : 'Locations below 80% target'}
+          <h3 className="text-xl md:text-2xl font-bold text-red-500">
+            {locationStats.filter(l => l.isAtRisk).length}
+          </h3>
+          <p className="text-[10px] text-slate-400 mt-1 truncate">
+             {language === 'zh' ? '需关注点位' : 'Needs attention'}
           </p>
         </div>
 
         {/* Card 3: Total Progress */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500 font-medium">
-                {t.totalCleanings}
-              </p>
-              <h3 className="text-2xl font-bold text-slate-800 flex items-baseline gap-1">
-                <span>{totalCleaned}</span>
-                <span className="text-lg text-slate-400 font-normal">/ {totalTarget}</span>
-              </h3>
-            </div>
-            <div className="p-3 bg-indigo-50 text-indigo-500 rounded-full">
-              <Target size={24} />
+        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs md:text-sm text-slate-500 font-medium truncate">
+              {t.totalCleanings}
+            </p>
+            <div className="p-2 md:p-3 bg-indigo-50 text-indigo-500 rounded-full">
+              <Target size={20} className="md:w-6 md:h-6" />
             </div>
           </div>
-          <p className="text-xs text-slate-400 mt-2">
-            {language === 'zh' 
-              ? `剩余任务: ${Math.max(0, totalTarget - totalCleaned)} 次` 
-              : `Remaining: ${Math.max(0, totalTarget - totalCleaned)} tasks`}
-          </p>
+          <h3 className="text-xl md:text-2xl font-bold text-slate-800 flex items-baseline gap-1">
+            <span>{totalCleaned}</span>
+            <span className="text-sm md:text-lg text-slate-400 font-normal">/ {totalTarget}</span>
+          </h3>
         </div>
 
         {/* Card 4: System Status */}
-         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+         <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100 hidden md:block">
            <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 font-medium">
@@ -320,9 +388,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
            <div className="flex items-center justify-between mt-2">
              <p className="text-xs text-slate-400">
-               {language === 'zh' ? '云端数据实时同步中' : 'Data syncing with cloud'}
+               {language === 'zh' ? '云端同步' : 'Cloud Sync'}
              </p>
-             <span className="text-[10px] text-brand-600 font-mono bg-brand-50 border border-brand-100 px-1.5 py-0.5 rounded">v3.0 LIVE</span>
+             <span className="text-[10px] text-brand-600 font-mono bg-brand-50 border border-brand-100 px-1.5 py-0.5 rounded">v3.0</span>
            </div>
         </div>
       </div>
@@ -331,190 +399,188 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Column: Location List */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="lg:col-span-2">
+          
+          {/* Header & Search */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-brand-500" />
               {t.liveStatus}
             </h2>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                <input 
-                  type="text"
-                  placeholder={t.search}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  value={filterText}
-                  onChange={(e) => setFilterText(e.target.value)}
-                />
-              </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text"
+                placeholder={t.search}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+              />
             </div>
           </div>
+
+          {/* --- MOBILE CARD VIEW (Visible on small screens) --- */}
+          <div className="md:hidden space-y-3">
+             {filteredLocations.map(loc => (
+               <div 
+                 key={loc.id} 
+                 className={`bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden transition-all ${
+                   expandedLocationId === loc.id ? 'ring-2 ring-brand-100' : ''
+                 }`}
+                 onClick={() => toggleRow(loc.id)}
+               >
+                 <div className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                       <div className="pr-2">
+                          <h3 className="font-bold text-slate-800 text-sm leading-tight">{loc.displayName}</h3>
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded">
+                             {loc.zone}
+                          </span>
+                       </div>
+                       <div className="shrink-0">
+                          {renderStatusBadge(loc)}
+                       </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mb-3">
+                       <div className="flex justify-between text-xs text-slate-500 mb-1">
+                          <span>{t.progress}</span>
+                          <span className="font-mono">{loc.count} / {loc.periodTarget}</span>
+                       </div>
+                       <div className="w-full bg-slate-100 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              loc.isOverachieved ? 'bg-indigo-500' : 
+                              loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                            }`} 
+                            style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                          />
+                       </div>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs text-slate-400">
+                       <div className="flex items-center gap-1">
+                          <Clock size={12} />
+                          {loc.lastClean > 0 ? (
+                             <span>
+                               {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                             </span>
+                          ) : '--:--'}
+                       </div>
+                       {expandedLocationId === loc.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                 </div>
+
+                 {/* Expanded Details Mobile */}
+                 {expandedLocationId === loc.id && renderLogDetails(loc)}
+               </div>
+             ))}
+          </div>
           
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-slate-500 font-medium">
-                <tr>
-                  <th className="px-6 py-4">{t.location}</th>
-                  <th className="px-6 py-4">{t.zone}</th>
-                  <th className="px-6 py-4">{t.status}</th>
-                  <th className="px-6 py-4">{t.progress}</th>
-                  <th className="px-6 py-4">{t.lastCleaned}</th>
-                  <th className="w-8 px-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredLocations.map((loc) => (
-                  <React.Fragment key={loc.id}>
-                    <tr 
-                      onClick={() => toggleRow(loc.id)} 
-                      className={`transition-colors cursor-pointer group ${expandedLocationId === loc.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
-                    >
-                      <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-2">
-                         {loc.displayName}
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">
-                        <span className="px-2 py-1 bg-slate-100 rounded text-xs">
-                          {loc.zone}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {loc.isOverachieved ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                             <Trophy size={12} /> {t.overachieved}
+          {/* --- DESKTOP TABLE VIEW (Hidden on mobile) --- */}
+          <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium">
+                  <tr>
+                    <th className="px-6 py-4">{t.location}</th>
+                    <th className="px-6 py-4">{t.zone}</th>
+                    <th className="px-6 py-4">{t.status}</th>
+                    <th className="px-6 py-4">{t.progress}</th>
+                    <th className="px-6 py-4">{t.lastCleaned}</th>
+                    <th className="w-8 px-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredLocations.map((loc) => (
+                    <React.Fragment key={loc.id}>
+                      <tr 
+                        onClick={() => toggleRow(loc.id)} 
+                        className={`transition-colors cursor-pointer group ${expandedLocationId === loc.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
+                      >
+                        <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-2">
+                           {loc.displayName}
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">
+                          <span className="px-2 py-1 bg-slate-100 rounded text-xs">
+                            {loc.zone}
                           </span>
-                        ) : loc.isAtRisk ? (
-                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
-                              <AlertTriangle size={12} /> {t.behind}
-                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-600">
-                             <CheckCircle size={12} /> {t.onTrack}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                              <div 
-                                className={`h-1.5 rounded-full ${
-                                  loc.isOverachieved ? 'bg-indigo-500' : 
-                                  loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
-                                }`} 
-                                style={{ width: `${Math.min(loc.percentage, 100)}%` }}
-                              />
+                        </td>
+                        <td className="px-6 py-4">
+                          {renderStatusBadge(loc)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                  className={`h-1.5 rounded-full ${
+                                    loc.isOverachieved ? 'bg-indigo-500' : 
+                                    loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                                  }`} 
+                                  style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-slate-500 font-medium">
+                                {loc.count} / {loc.periodTarget}
+                                
+                                {daysDiff === 1 && (
+                                    editingLocationId === loc.id ? (
+                                        <span className="inline-flex items-center ml-1" onClick={e => e.stopPropagation()}>
+                                        <input 
+                                            type="number" 
+                                            className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            value={editTargetFreq}
+                                            onChange={(e) => setEditTargetFreq(e.target.value)}
+                                            autoFocus
+                                            onBlur={() => handleSaveLocation(loc)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
+                                        />
+                                        </span>
+                                    ) : (
+                                        <span 
+                                        className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
+                                        onClick={(e) => handleStartEditLocation(e, loc)}
+                                        title={t.editTarget}
+                                        >
+                                        <Edit size={10} />
+                                        </span>
+                                    )
+                                )}
+                              </span>
                             </div>
-                            <span className="text-xs text-slate-500 font-medium">
-                              {loc.count} / {loc.periodTarget}
-                              
-                              {/* Editable Target Icon (Only show if viewing 1 day) */}
-                              {daysDiff === 1 && (
-                                  editingLocationId === loc.id ? (
-                                      <span className="inline-flex items-center ml-1" onClick={e => e.stopPropagation()}>
-                                      <input 
-                                          type="number" 
-                                          className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                          value={editTargetFreq}
-                                          onChange={(e) => setEditTargetFreq(e.target.value)}
-                                          autoFocus
-                                          onBlur={() => handleSaveLocation(loc)}
-                                          onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
-                                      />
-                                      </span>
-                                  ) : (
-                                      <span 
-                                      className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
-                                      onClick={(e) => handleStartEditLocation(e, loc)}
-                                      title={t.editTarget}
-                                      >
-                                      <Edit size={10} />
-                                      </span>
-                                  )
-                              )}
-                            </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">
-                        {loc.lastClean > 0 ? (
-                           <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
-                             <Clock size={12} />
-                             {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                             {/* Add date if displaying range > 1 day */}
-                             {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
-                           </span>
-                        ) : (
-                          <span className="text-slate-400 italic">--</span>
-                        )}
-                      </td>
-                      <td className="px-2">
-                         {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
-                      </td>
-                    </tr>
-                    
-                    {/* Expanded Detail View */}
-                    {expandedLocationId === loc.id && (
-                      <tr className="bg-slate-50 border-b border-slate-100 shadow-inner">
-                        <td colSpan={6} className="p-0">
-                           <div className="px-6 py-4 animate-fade-in">
-                             <div className="flex items-center gap-2 mb-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                <History size={14} />
-                                {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
-                             </div>
-                             
-                             {loc.logs.length > 0 ? (
-                               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                                 <table className="w-full text-xs">
-                                   <thead className="bg-slate-50 text-slate-500 border-b border-slate-100">
-                                      <tr>
-                                        <th className="px-4 py-2 text-left">{language === 'zh' ? '时间' : 'Time'}</th>
-                                        <th className="px-4 py-2 text-left">{language === 'zh' ? '保洁员' : 'Cleaner'}</th>
-                                        <th className="px-4 py-2 text-right">{language === 'zh' ? '状态' : 'Status'}</th>
-                                      </tr>
-                                   </thead>
-                                   <tbody className="divide-y divide-slate-100">
-                                      {loc.logs.map(log => {
-                                        const cleaner = cleaners.find(c => c.id === log.cleanerId);
-                                        return (
-                                          <tr key={log.id} className="hover:bg-slate-50">
-                                            <td className="px-4 py-2.5 font-mono text-slate-600">
-                                               {new Date(log.timestamp).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
-                                            </td>
-                                            <td className="px-4 py-2.5 flex items-center gap-2">
-                                               {cleaner ? (
-                                                 <>
-                                                   <img src={cleaner.avatar} className="w-5 h-5 rounded-full" />
-                                                   <span className="font-medium text-slate-700">{cleaner.name}</span>
-                                                 </>
-                                               ) : (
-                                                 <span className="text-slate-400">Unknown</span>
-                                               )}
-                                            </td>
-                                            <td className="px-4 py-2.5 text-right">
-                                              <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold text-[10px]">
-                                                <CheckCircle size={10} /> Completed
-                                              </span>
-                                            </td>
-                                          </tr>
-                                        )
-                                      })}
-                                   </tbody>
-                                 </table>
-                               </div>
-                             ) : (
-                               <div className="text-center py-6 text-slate-400 text-sm italic border-2 border-dashed border-slate-200 rounded-lg">
-                                  {language === 'zh' ? '该时间段内无打卡记录' : 'No records found for this period.'}
-                               </div>
-                             )}
-                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">
+                          {loc.lastClean > 0 ? (
+                             <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
+                               <Clock size={12} />
+                               {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                               {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
+                             </span>
+                          ) : (
+                            <span className="text-slate-400 italic">--</span>
+                          )}
+                        </td>
+                        <td className="px-2">
+                           {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                      
+                      {/* Expanded Detail View Desktop */}
+                      {expandedLocationId === loc.id && (
+                        <tr className="bg-slate-50 border-b border-slate-100 shadow-inner">
+                          <td colSpan={6} className="p-0">
+                             {renderLogDetails(loc)}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
