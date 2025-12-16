@@ -12,18 +12,18 @@ import {
   subscribeToLogs, 
   subscribeToCleaners, 
   subscribeToLocations, 
-  subscribeToManagers, // New
+  subscribeToManagers, 
   updateLocation, 
-  addNewLocation, // New
-  deleteLocation, // New
+  addNewLocation, 
+  deleteLocation, 
   addCleaningLog, 
   updateCleaner,
   addNewCleaner, 
   deleteCleaner, 
   clearAllLogs,
   fetchLogs,
-  addNewManager, // New
-  deleteManager // New
+  addNewManager, 
+  deleteManager 
 } from './services/firebase';
 import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Building2 } from 'lucide-react';
 
@@ -49,19 +49,19 @@ const App: React.FC = () => {
 
   const t = TRANSLATIONS[language];
 
-  // 1. Initialize System & Master Subscriptions
+  // 1. Initialize System & Master Subscriptions (Always Run)
   useEffect(() => {
     const cloudInit = initFirebase();
     setIsCloudMode(cloudInit);
 
     if (cloudInit) {
-      // Subscribe to Managers List (Public/Visible for Login selection)
+      // Subscribe to Managers List (Always needed for Login selection)
       const unsubManagers = subscribeToManagers((mgrs) => setManagersList(mgrs));
       return () => { unsubManagers(); };
     } 
   }, []);
 
-  // 2. Role-Based Data Subscriptions
+  // 2. Dynamic Data Subscriptions based on Role
   useEffect(() => {
     if (!isCloudMode) return;
     
@@ -71,15 +71,25 @@ const App: React.FC = () => {
     let unsubLocations = () => {};
 
     if (currentUserRole === 'manager' && currentManager) {
-        // Manager View: Scoped to their ID
+        // --- Manager View: Scoped to their ID ---
+        console.log("Subscribing to Manager Data:", currentManager.id);
         unsubLogs = subscribeToLogs(setLogs, currentManager.id);
         unsubCleaners = subscribeToCleaners(setCleanersList, currentManager.id);
         unsubLocations = subscribeToLocations(setLocationsList, currentManager.id);
     } 
     else if (currentUserRole === 'cleaner' && currentCleaner) {
-        // Cleaner View: Scoped to their Manager ID (need to see locations)
+        // --- Cleaner View: Scoped to their Manager ID ---
+        console.log("Subscribing to Cleaner Data for Manager:", currentCleaner.managerId);
         unsubLocations = subscribeToLocations(setLocationsList, currentCleaner.managerId);
-        // Cleaners don't necessarily need logs/other cleaners, but if we wanted to show leaderboard, we would fetch them.
+    }
+    else if (!currentUserRole) {
+        // --- Logged Out View (Login Screen) ---
+        // We need to fetch ALL cleaners so they appear in the dropdown when a department is selected.
+        // The filtering happens client-side in LoginScreen.tsx based on the selected Manager ID.
+        console.log("Subscribing to ALL Cleaners for Login Screen");
+        unsubCleaners = subscribeToCleaners((allCleaners) => {
+          setCleanersList(allCleaners);
+        });
     }
 
     return () => { 
@@ -240,14 +250,7 @@ const App: React.FC = () => {
       {/* MAIN VIEW SWITCHER */}
       {!currentUserRole ? (
         <LoginScreen 
-          cleaners={cleanersList} // Note: This might be empty initially, fetch happens on selection logic in LoginScreen if optimized, or we fetch all here? 
-                                  // For simplicity in this demo, subscribeToManagers happens first. LoginScreen handles fetching cleaners after dept select or we subscribe all.
-                                  // In real app, we fetch cleaners ON demand. For now, let's allow LoginScreen to filter.
-                                  // Wait, cleanersList is only populated if logged in? We need a way to list cleaners for login.
-                                  // FIX: We need a global cleaner subscription for the login screen OR fetch on dept select.
-                                  // Let's implement "Fetch All Cleaners" for login screen temporarily or rely on LoginScreen to query.
-                                  // Actually, let's subscribe to ALL cleaners in Login State for simplicity in this demo (if dataset small).
-                                  // See below useEffect hack.
+          cleaners={cleanersList}
           managers={managersList}
           onLogin={handleLogin} 
           language={language} 
@@ -382,21 +385,8 @@ const App: React.FC = () => {
           </main>
         </>
       )}
-
-      {/* Temp Hack to load all cleaners for login screen when no user is logged in */}
-      {/* In production, we'd query API on selection. Here we use a hidden subscriber */}
-      {!currentUserRole && <CleanerListSubscriber setCleaners={setCleanersList} />}
     </div>
   );
 };
-
-// Helper component to fetch cleaners for login screen
-const CleanerListSubscriber = ({ setCleaners }: { setCleaners: (c: Cleaner[]) => void }) => {
-    useEffect(() => {
-        const unsub = subscribeToCleaners(setCleaners); // Subscribe to ALL cleaners
-        return () => unsub();
-    }, []);
-    return null;
-}
 
 export default App;

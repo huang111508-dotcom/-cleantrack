@@ -1,5 +1,5 @@
 {
-  "name": "CleanTrack - Retail Hygiene Ops",
+  "name": "龙城店保洁",
   "description": "A supermarket cleaning task tracking system. Features QR-code based check-ins for cleaners and a real-time dashboard for managers with AI-powered anomaly detection.",
   "requestFramePermissions": [
     "camera"
