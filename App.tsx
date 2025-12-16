@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
-import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole } from './types';
-import { LOCATIONS, CLEANERS, generateInitialLogs, TRANSLATIONS } from './constants';
+import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole, Manager } from './types';
+import { LOCATIONS, CLEANERS, TRANSLATIONS } from './constants';
 import Dashboard from './components/Dashboard';
+import MasterDashboard from './components/MasterDashboard';
 import CleanerInterface from './components/CleanerInterface';
 import QRCodeGenerator from './components/QRCodeGenerator';
 import LoginScreen from './components/LoginScreen';
@@ -9,28 +11,37 @@ import {
   initFirebase, 
   subscribeToLogs, 
   subscribeToCleaners, 
-  subscribeToLocations, // New
-  updateLocation, // New
-  seedLocationsIfEmpty, // New
+  subscribeToLocations, 
+  subscribeToManagers, // New
+  updateLocation, 
+  addNewLocation, // New
+  deleteLocation, // New
   addCleaningLog, 
   updateCleaner,
   addNewCleaner, 
   deleteCleaner, 
-  seedCleanersIfEmpty,
   clearAllLogs,
-  fetchLogs 
+  fetchLogs,
+  addNewManager, // New
+  deleteManager // New
 } from './services/firebase';
-import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud } from 'lucide-react';
+import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Building2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // Application State
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
+  
+  // Data State
+  const [managersList, setManagersList] = useState<Manager[]>([]);
   const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
-  const [locationsList, setLocationsList] = useState<Location[]>(LOCATIONS); // Init with default
+  const [locationsList, setLocationsList] = useState<Location[]>([]); 
+  const [logs, setLogs] = useState<CleaningLog[]>([]);
+  
+  // Session State
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
+  const [currentManager, setCurrentManager] = useState<Manager | undefined>(undefined);
   
   const [view, setView] = useState<ViewState>('dashboard');
-  const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [language, setLanguage] = useState<Language>('zh'); 
 
   // Cloud Mode State
@@ -38,157 +49,141 @@ const App: React.FC = () => {
 
   const t = TRANSLATIONS[language];
 
-  // 1. Initialize System
+  // 1. Initialize System & Master Subscriptions
   useEffect(() => {
     const cloudInit = initFirebase();
     setIsCloudMode(cloudInit);
 
     if (cloudInit) {
-      // Seed Data
-      seedCleanersIfEmpty(CLEANERS);
-      seedLocationsIfEmpty(LOCATIONS);
+      // Subscribe to Managers List (Public/Visible for Login selection)
+      const unsubManagers = subscribeToManagers((mgrs) => setManagersList(mgrs));
+      return () => { unsubManagers(); };
+    } 
+  }, []);
 
-      // Subscribe
-      const unsubLogs = subscribeToLogs((newLogs) => setLogs(newLogs));
-      const unsubCleaners = subscribeToCleaners((newCleaners) => setCleanersList(newCleaners));
-      const unsubLocations = subscribeToLocations((newLocs) => setLocationsList(newLocs));
+  // 2. Role-Based Data Subscriptions
+  useEffect(() => {
+    if (!isCloudMode) return;
+    
+    // cleanup previous subscriptions
+    let unsubLogs = () => {};
+    let unsubCleaners = () => {};
+    let unsubLocations = () => {};
 
-      return () => { 
+    if (currentUserRole === 'manager' && currentManager) {
+        // Manager View: Scoped to their ID
+        unsubLogs = subscribeToLogs(setLogs, currentManager.id);
+        unsubCleaners = subscribeToCleaners(setCleanersList, currentManager.id);
+        unsubLocations = subscribeToLocations(setLocationsList, currentManager.id);
+    } 
+    else if (currentUserRole === 'cleaner' && currentCleaner) {
+        // Cleaner View: Scoped to their Manager ID (need to see locations)
+        unsubLocations = subscribeToLocations(setLocationsList, currentCleaner.managerId);
+        // Cleaners don't necessarily need logs/other cleaners, but if we wanted to show leaderboard, we would fetch them.
+    }
+
+    return () => { 
         unsubLogs(); 
         unsubCleaners(); 
         unsubLocations(); 
-      };
-    } else {
-      console.warn("Cloud init failed, falling back to local storage");
-      
-      // Load Cleaners
-      const savedCleaners = localStorage.getItem('cleanersData');
-      if (savedCleaners) setCleanersList(JSON.parse(savedCleaners));
-      else setCleanersList(CLEANERS);
+    };
+  }, [currentUserRole, currentManager, currentCleaner, isCloudMode]);
 
-      // Load Locations (New)
-      const savedLocations = localStorage.getItem('locationsData');
-      if (savedLocations) setLocationsList(JSON.parse(savedLocations));
-      else setLocationsList(LOCATIONS);
-
-      // Load Logs
-      const savedLogs = localStorage.getItem('cleaningLogs');
-      if (savedLogs) setLogs(JSON.parse(savedLogs));
-      else {
-        const initial = generateInitialLogs();
-        setLogs(initial);
-        localStorage.setItem('cleaningLogs', JSON.stringify(initial));
-      }
-    }
-  }, []);
-
-  // 2. Persist Local Data
-  useEffect(() => {
-    if (!isCloudMode && cleanersList.length > 0) {
-      localStorage.setItem('cleanersData', JSON.stringify(cleanersList));
-    }
-  }, [cleanersList, isCloudMode]);
-
-  useEffect(() => {
-    if (!isCloudMode && locationsList.length > 0) {
-      localStorage.setItem('locationsData', JSON.stringify(locationsList));
-    }
-  }, [locationsList, isCloudMode]);
-
-  useEffect(() => {
-    if (!isCloudMode) {
-      localStorage.setItem('cleaningLogs', JSON.stringify(logs));
-    }
-  }, [logs, isCloudMode]);
 
   // Actions
-  const handleLogin = (role: UserRole, cleaner?: Cleaner) => {
+  const handleLogin = (role: UserRole, data?: any) => {
     setCurrentUserRole(role);
-    if (role === 'cleaner' && cleaner) {
-      setCurrentCleaner(cleaner);
+    if (role === 'cleaner' && data) {
+      setCurrentCleaner(data);
       setView('cleaner-scan');
-    } else if (role === 'manager') {
+    } else if (role === 'manager' && data) {
+      setCurrentManager(data);
       setView('dashboard');
+    } else if (role === 'master') {
+      setView('master-dashboard');
     }
   };
 
   const handleLogout = () => {
     setCurrentUserRole(null);
     setCurrentCleaner(undefined);
-    setView('dashboard'); 
+    setCurrentManager(undefined);
+    setView('dashboard'); // reset view
+    // Clear data to prevent flashing old data on re-login
+    setLogs([]);
+    setCleanersList([]);
+    setLocationsList([]);
   };
+
+  // --- MASTER ACTIONS ---
+  const handleAddManager = async (name: string, dept: string, pass: string) => {
+    await addNewManager(name, dept, pass);
+  };
+  
+  const handleDeleteManager = async (id: string) => {
+    if(confirm(language === 'zh' ? '确定删除该部门及其管理员吗？' : 'Delete this department?')) {
+      await deleteManager(id);
+    }
+  };
+
+  // --- MANAGER ACTIONS ---
 
   const handleUpdateCleaner = async (updatedCleaner: Cleaner) => {
-    if (isCloudMode) {
-      await updateCleaner(updatedCleaner);
-    } else {
-      setCleanersList(prev => prev.map(c => c.id === updatedCleaner.id ? updatedCleaner : c));
-    }
+    await updateCleaner(updatedCleaner);
   };
 
-  // NEW: Handle location updates (e.g. target frequency)
   const handleUpdateLocation = async (updatedLocation: Location) => {
-    if (isCloudMode) {
-      await updateLocation(updatedLocation);
-    } else {
-      setLocationsList(prev => prev.map(l => l.id === updatedLocation.id ? updatedLocation : l));
-    }
+    await updateLocation(updatedLocation);
   };
 
   const handleAddCleaner = async (name: string, password: string) => {
-    if (isCloudMode) {
-      await addNewCleaner(name, password);
-    } else {
-      const newId = `c-${Date.now()}`;
-      const newCleaner = { 
-        id: newId, 
-        name, 
-        password, 
-        avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random()*70)}` 
-      };
-      setCleanersList(prev => [...prev, newCleaner]);
+    if (currentManager) {
+      await addNewCleaner(currentManager.id, name, password);
     }
   };
 
   const handleDeleteCleaner = async (id: string) => {
-    if(confirm(language === 'zh' ? '确定要删除该保洁员吗？' : 'Are you sure you want to delete this cleaner?')) {
-      if (isCloudMode) {
-        await deleteCleaner(id);
-      } else {
-        setCleanersList(prev => prev.filter(c => c.id !== id));
-      }
+    if(confirm(language === 'zh' ? '确定要删除该保洁员吗？' : 'Delete this cleaner?')) {
+      await deleteCleaner(id);
     }
   };
+
+  const handleAddLocation = async (nameZh: string, nameEn: string, zone: string, target: number) => {
+    if (currentManager) {
+        await addNewLocation(currentManager.id, nameZh, nameEn, zone, target);
+    }
+  }
+
+  const handleDeleteLocation = async (id: string) => {
+    if(confirm(language === 'zh' ? '确定要删除该点位吗？' : 'Delete this location?')) {
+        await deleteLocation(id);
+    }
+  }
 
   const handleLogCleaning = async (locationId: string) => {
     if (!currentCleaner) return;
     const newLog: CleaningLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       locationId,
+      managerId: currentCleaner.managerId, // Tag log with manager ID
       cleanerId: currentCleaner.id,
       timestamp: Date.now(),
       status: 'completed'
     };
-    if (isCloudMode) await addCleaningLog(newLog);
-    else setLogs(prev => [newLog, ...prev]);
+    await addCleaningLog(newLog);
   };
 
   const handleResetData = async () => {
     if(confirm(t.resetConfirm)) {
-      if (isCloudMode) await clearAllLogs();
-      else setLogs([]);
+      if (currentManager) {
+        await clearAllLogs(currentManager.id);
+      }
     }
   }
 
   const handleRefreshData = async () => {
-    if (isCloudMode) {
-       const freshLogs = await fetchLogs();
-       setLogs(freshLogs);
-       console.log("Manually refreshed logs from cloud");
-    } else {
-       const savedLogs = localStorage.getItem('cleaningLogs');
-       if (savedLogs) setLogs(JSON.parse(savedLogs));
-    }
+     // Trigger re-fetch logic if needed, largely handled by snapshot listeners
+     console.log("Refreshing...");
   };
 
   const handleExportData = () => {
@@ -245,13 +240,21 @@ const App: React.FC = () => {
       {/* MAIN VIEW SWITCHER */}
       {!currentUserRole ? (
         <LoginScreen 
-          cleaners={cleanersList.length > 0 ? cleanersList : CLEANERS}
+          cleaners={cleanersList} // Note: This might be empty initially, fetch happens on selection logic in LoginScreen if optimized, or we fetch all here? 
+                                  // For simplicity in this demo, subscribeToManagers happens first. LoginScreen handles fetching cleaners after dept select or we subscribe all.
+                                  // In real app, we fetch cleaners ON demand. For now, let's allow LoginScreen to filter.
+                                  // Wait, cleanersList is only populated if logged in? We need a way to list cleaners for login.
+                                  // FIX: We need a global cleaner subscription for the login screen OR fetch on dept select.
+                                  // Let's implement "Fetch All Cleaners" for login screen temporarily or rely on LoginScreen to query.
+                                  // Actually, let's subscribe to ALL cleaners in Login State for simplicity in this demo (if dataset small).
+                                  // See below useEffect hack.
+          managers={managersList}
           onLogin={handleLogin} 
           language={language} 
         />
       ) : (
         <>
-          {currentUserRole === 'manager' && (
+          {(currentUserRole === 'manager' || currentUserRole === 'master') && (
             <nav className="bg-white border-b border-slate-200 sticky top-0 z-40 no-print">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
@@ -259,29 +262,31 @@ const App: React.FC = () => {
                     <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
                       CT
                     </div>
-                    <span className="font-bold text-xl tracking-tight text-slate-800">
+                    <span className="font-bold text-xl tracking-tight text-slate-800 hidden md:block">
                       {t.appTitle}
                     </span>
-                    <span className="ml-1 text-[10px] text-white bg-brand-500 px-1.5 py-0.5 rounded-full font-bold">v3.0</span>
+                    <span className="ml-1 text-[10px] text-white bg-brand-500 px-1.5 py-0.5 rounded-full font-bold">v4.0</span>
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-4">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-50 border border-green-100 text-xs text-green-700 font-medium animate-fade-in">
-                      <Cloud size={14} className="text-green-500" />
-                      <span className="hidden sm:inline">{language === 'zh' ? '云端在线' : 'Cloud Online'}</span>
+                    {/* Role Badge */}
+                    <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-slate-100 text-xs font-bold text-slate-600">
+                        {currentUserRole === 'master' ? <Cloud size={14}/> : <Building2 size={14}/>}
+                        {currentUserRole === 'master' ? 'Master Admin' : currentManager?.departmentName}
                     </div>
 
                     <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
 
+                    {/* Nav Items */}
                     <div className="flex bg-slate-100 rounded-lg p-1 hidden sm:flex">
                       <button
-                        onClick={() => setView('dashboard')}
+                        onClick={() => setView(currentUserRole === 'master' ? 'master-dashboard' : 'dashboard')}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                          view === 'dashboard' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                          (view === 'dashboard' || view === 'master-dashboard') ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                         }`}
                       >
                         <LayoutDashboard size={16} />
-                        <span className="hidden sm:inline">{t.manager}</span>
+                        <span className="hidden sm:inline">{currentUserRole === 'master' ? 'Admin' : t.manager}</span>
                       </button>
                       <button
                         onClick={() => setView('qr-print')}
@@ -303,14 +308,16 @@ const App: React.FC = () => {
                         <Download size={14} />
                         {t.export}
                       </button>
-                      <button 
-                        onClick={handleResetData} 
-                        className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
-                        title={t.reset}
-                      >
-                        <Trash2 size={14} />
-                        {t.reset}
-                      </button>
+                      {currentUserRole === 'manager' && (
+                        <button 
+                            onClick={handleResetData} 
+                            className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
+                            title={t.reset}
+                        >
+                            <Trash2 size={14} />
+                            {t.reset}
+                        </button>
+                      )}
                     </div>
 
                     <button 
@@ -327,25 +334,42 @@ const App: React.FC = () => {
           )}
 
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {currentUserRole === 'manager' && view === 'dashboard' && (
+            
+            {/* MASTER VIEW */}
+            {currentUserRole === 'master' && view === 'master-dashboard' && (
+               <MasterDashboard 
+                  managers={managersList}
+                  onAddManager={handleAddManager}
+                  onDeleteManager={handleDeleteManager}
+                  language={language}
+               />
+            )}
+
+            {/* MANAGER DASHBOARD VIEW */}
+            {currentUserRole === 'manager' && view === 'dashboard' && currentManager && (
               <Dashboard 
-                locations={locationsList} // Use dynamic list
+                locations={locationsList} 
                 logs={logs} 
                 cleaners={cleanersList}
+                departmentName={currentManager.departmentName}
                 onUpdateCleaner={handleUpdateCleaner}
-                onUpdateLocation={handleUpdateLocation} // Pass update handler
+                onUpdateLocation={handleUpdateLocation} 
                 onAddCleaner={handleAddCleaner}
                 onDeleteCleaner={handleDeleteCleaner} 
+                onAddLocation={handleAddLocation}
+                onDeleteLocation={handleDeleteLocation}
                 language={language}
                 onRefresh={handleRefreshData}
                 isCloudMode={isCloudMode}
               />
             )}
             
-            {currentUserRole === 'manager' && view === 'qr-print' && (
-              <QRCodeGenerator locations={locationsList} language={language} />
+            {/* PRINT VIEW (Shared) */}
+            {((currentUserRole === 'manager' && view === 'qr-print') || (currentUserRole === 'master' && view === 'qr-print')) && (
+              <QRCodeGenerator locations={currentUserRole === 'master' ? [] : locationsList} language={language} /> // Master doesn't see locations usually
             )}
 
+            {/* CLEANER VIEW */}
             {currentUserRole === 'cleaner' && currentCleaner && (
               <CleanerInterface 
                 locations={locationsList}
@@ -358,8 +382,21 @@ const App: React.FC = () => {
           </main>
         </>
       )}
+
+      {/* Temp Hack to load all cleaners for login screen when no user is logged in */}
+      {/* In production, we'd query API on selection. Here we use a hidden subscriber */}
+      {!currentUserRole && <CleanerListSubscriber setCleaners={setCleanersList} />}
     </div>
   );
 };
+
+// Helper component to fetch cleaners for login screen
+const CleanerListSubscriber = ({ setCleaners }: { setCleaners: (c: Cleaner[]) => void }) => {
+    useEffect(() => {
+        const unsub = subscribeToCleaners(setCleaners); // Subscribe to ALL cleaners
+        return () => unsub();
+    }, []);
+    return null;
+}
 
 export default App;

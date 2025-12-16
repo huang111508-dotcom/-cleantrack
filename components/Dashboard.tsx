@@ -23,7 +23,9 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  History
+  History,
+  MapPin,
+  Building2
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -35,8 +37,11 @@ interface DashboardProps {
   onUpdateLocation: (updatedLocation: Location) => void; 
   onAddCleaner: (name: string, password: string) => void;
   onDeleteCleaner: (id: string) => void;
+  onAddLocation: (nameZh: string, nameEn: string, zone: string, target: number) => void;
+  onDeleteLocation: (id: string) => void;
   onRefresh: () => void;
   isCloudMode: boolean;
+  departmentName?: string; // New prop
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -48,8 +53,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   onUpdateLocation,
   onAddCleaner,
   onDeleteCleaner,
+  onAddLocation,
+  onDeleteLocation,
   onRefresh,
-  isCloudMode
+  isCloudMode,
+  departmentName
 }) => {
   const t = TRANSLATIONS[language];
   
@@ -71,14 +79,25 @@ const Dashboard: React.FC<DashboardProps> = ({
   // -- Expansion State --
   const [expandedLocationId, setExpandedLocationId] = useState<string | null>(null);
 
+  // Cleaner Edit State
   const [editingCleaner, setEditingCleaner] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  
+  // Location Edit State
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [editTargetFreq, setEditTargetFreq] = useState<string>('');
-  const [isAdding, setIsAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  
+  // Adding States
+  const [isAddingCleaner, setIsAddingCleaner] = useState(false);
+  const [newCleanerName, setNewCleanerName] = useState('');
+  const [newCleanerPassword, setNewCleanerPassword] = useState('');
+
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [newLocNameZh, setNewLocNameZh] = useState('');
+  const [newLocNameEn, setNewLocNameEn] = useState('');
+  const [newLocZone, setNewLocZone] = useState('');
+  const [newLocTarget, setNewLocTarget] = useState('20');
 
   // -- Date Logic Calculations --
   const startTs = new Date(startDate).setHours(0, 0, 0, 0);
@@ -95,7 +114,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     const count = locLogs.length;
     
     const periodTarget = loc.targetDailyFrequency * daysDiff;
-    const percentage = Math.round((count / periodTarget) * 100);
+    const percentage = periodTarget > 0 ? Math.round((count / periodTarget) * 100) : 0;
     
     const isOverachieved = count > periodTarget;
     const isAtRisk = percentage < 80; 
@@ -140,14 +159,25 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handleConfirmAdd = () => {
-    if (newName.trim() && newPassword.trim()) {
-      onAddCleaner(newName, newPassword);
-      setNewName('');
-      setNewPassword('');
-      setIsAdding(false);
+  const handleConfirmAddCleaner = () => {
+    if (newCleanerName.trim() && newCleanerPassword.trim()) {
+      onAddCleaner(newCleanerName, newCleanerPassword);
+      setNewCleanerName('');
+      setNewCleanerPassword('');
+      setIsAddingCleaner(false);
     }
   };
+
+  const handleConfirmAddLocation = () => {
+    if (newLocNameZh.trim() && newLocTarget) {
+      onAddLocation(newLocNameZh, newLocNameEn || newLocNameZh, newLocZone || 'General', parseInt(newLocTarget));
+      setNewLocNameZh('');
+      setNewLocNameEn('');
+      setNewLocZone('');
+      setNewLocTarget('20');
+      setIsAddingLocation(false);
+    }
+  }
 
   const handleStartEditLocation = (e: React.MouseEvent, loc: Location) => {
     e.stopPropagation(); // Prevent row toggle
@@ -203,7 +233,15 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Helper for expanded log view
   const renderLogDetails = (loc: any) => (
-    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 animate-fade-in">
+    <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 animate-fade-in relative">
+       {/* Delete Location Button - Only in expanded view */}
+       <button 
+          onClick={(e) => { e.stopPropagation(); onDeleteLocation(loc.id); }}
+          className="absolute right-4 top-3 text-red-400 hover:text-red-600 flex items-center gap-1 text-xs px-2 py-1 hover:bg-red-50 rounded"
+       >
+         <Trash2 size={12} /> {language === 'zh' ? '删除点位' : 'Delete Location'}
+       </button>
+
        <div className="flex items-center gap-2 mb-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
           <History size={14} />
           {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
@@ -260,6 +298,22 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       
+      {departmentName && (
+        <div className="bg-gradient-to-r from-brand-600 to-indigo-700 text-white p-6 rounded-2xl shadow-lg mb-6 flex items-center justify-between">
+           <div>
+             <h1 className="text-2xl font-bold flex items-center gap-2">
+               <Building2 className="text-white/80" />
+               {departmentName}
+             </h1>
+             <p className="text-white/60 text-sm mt-1">Department Dashboard</p>
+           </div>
+           <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+             <div className="text-xs text-white/60 uppercase font-bold">Total Locations</div>
+             <div className="text-2xl font-bold">{locations.length}</div>
+           </div>
+        </div>
+      )}
+      
       {/* --- Filter Bar --- */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center w-full">
@@ -268,7 +322,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                <span>{t.dateRange}</span>
             </div>
             
-            {/* Date Inputs - Optimized for Mobile */}
             <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:items-center">
                <div className="flex flex-col">
                   <label className="text-[10px] text-slate-400 font-medium uppercase mb-1">{t.startDate}</label>
@@ -311,88 +364,9 @@ const Dashboard: React.FC<DashboardProps> = ({
               className="w-full md:w-auto flex items-center justify-center gap-1 text-sm text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-lg font-medium transition-colors"
             >
               <RotateCw size={14} />
-              <span>{language === 'zh' ? '刷新数据' : 'Refresh Data'}</span>
+              <span>{language === 'zh' ? '刷新' : 'Refresh'}</span>
             </button>
          </div>
-      </div>
-
-      {/* Top Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {/* Card 1: Compliance */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs md:text-sm text-slate-500 font-medium">{t.dailyCompliance}</p>
-            <div className="p-2 md:p-3 bg-brand-50 text-brand-600 rounded-full">
-              <CheckCircle size={20} className="md:w-6 md:h-6" />
-            </div>
-          </div>
-          <h3 className="text-xl md:text-2xl font-bold text-slate-800">{overallProgress}%</h3>
-          <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2">
-            <div 
-              className="bg-brand-500 h-1.5 rounded-full transition-all duration-500" 
-              style={{ width: `${Math.min(overallProgress, 100)}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* Card 2: Issues */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs md:text-sm text-slate-500 font-medium">{t.activeIssues}</p>
-            <div className="p-2 md:p-3 bg-red-50 text-red-500 rounded-full">
-              <AlertTriangle size={20} className="md:w-6 md:h-6" />
-            </div>
-          </div>
-          <h3 className="text-xl md:text-2xl font-bold text-red-500">
-            {locationStats.filter(l => l.isAtRisk).length}
-          </h3>
-          <p className="text-[10px] text-slate-400 mt-1 truncate">
-             {language === 'zh' ? '需关注点位' : 'Needs attention'}
-          </p>
-        </div>
-
-        {/* Card 3: Total Progress */}
-        <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs md:text-sm text-slate-500 font-medium truncate">
-              {t.totalCleanings}
-            </p>
-            <div className="p-2 md:p-3 bg-indigo-50 text-indigo-500 rounded-full">
-              <Target size={20} className="md:w-6 md:h-6" />
-            </div>
-          </div>
-          <h3 className="text-xl md:text-2xl font-bold text-slate-800 flex items-baseline gap-1">
-            <span>{totalCleaned}</span>
-            <span className="text-sm md:text-lg text-slate-400 font-normal">/ {totalTarget}</span>
-          </h3>
-        </div>
-
-        {/* Card 4: System Status */}
-         <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-100 hidden md:block">
-           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500 font-medium">
-                {language === 'zh' ? '系统状态' : 'System Status'}
-              </p>
-              <h3 className="text-2xl font-bold text-green-600 flex items-center gap-2">
-                 {language === 'zh' ? '在线' : 'Online'}
-                 <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                  </span>
-              </h3>
-            </div>
-            <div className="p-3 rounded-full bg-green-50 text-green-600">
-               <Wifi size={24} />
-            </div>
-          </div>
-           <div className="flex items-center justify-between mt-2">
-             <p className="text-xs text-slate-400">
-               {language === 'zh' ? '云端同步' : 'Cloud Sync'}
-             </p>
-             <span className="text-[10px] text-brand-600 font-mono bg-brand-50 border border-brand-100 px-1.5 py-0.5 rounded">v3.0</span>
-           </div>
-        </div>
       </div>
 
       {/* Main Content Area */}
@@ -402,184 +376,245 @@ const Dashboard: React.FC<DashboardProps> = ({
         <div className="lg:col-span-2">
           
           {/* Header & Search */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-brand-500" />
-              {t.liveStatus}
-            </h2>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text"
-                placeholder={t.search}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-              />
-            </div>
-          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4">
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-brand-500" />
+                  {t.liveStatus}
+                </h2>
+                
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-48">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <input 
+                      type="text"
+                      placeholder={t.search}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      value={filterText}
+                      onChange={(e) => setFilterText(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={() => setIsAddingLocation(!isAddingLocation)}
+                    className="p-2 bg-brand-50 text-brand-600 rounded-lg border border-brand-100 hover:bg-brand-100"
+                    title="Add Location"
+                  >
+                    {isAddingLocation ? <X size={20} /> : <Plus size={20} />}
+                  </button>
+                </div>
+             </div>
 
-          {/* --- MOBILE CARD VIEW (Visible on small screens) --- */}
-          <div className="md:hidden space-y-3">
-             {filteredLocations.map(loc => (
-               <div 
-                 key={loc.id} 
-                 className={`bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden transition-all ${
-                   expandedLocationId === loc.id ? 'ring-2 ring-brand-100' : ''
-                 }`}
-                 onClick={() => toggleRow(loc.id)}
-               >
-                 <div className="p-4">
-                    <div className="flex justify-between items-start mb-3">
-                       <div className="pr-2">
-                          <h3 className="font-bold text-slate-800 text-sm leading-tight">{loc.displayName}</h3>
-                          <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded">
-                             {loc.zone}
-                          </span>
-                       </div>
-                       <div className="shrink-0">
-                          {renderStatusBadge(loc)}
-                       </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="mb-3">
-                       <div className="flex justify-between text-xs text-slate-500 mb-1">
-                          <span>{t.progress}</span>
-                          <span className="font-mono">{loc.count} / {loc.periodTarget}</span>
-                       </div>
-                       <div className="w-full bg-slate-100 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              loc.isOverachieved ? 'bg-indigo-500' : 
-                              loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
-                            }`} 
-                            style={{ width: `${Math.min(loc.percentage, 100)}%` }}
-                          />
-                       </div>
-                    </div>
-
-                    <div className="flex justify-between items-center text-xs text-slate-400">
-                       <div className="flex items-center gap-1">
-                          <Clock size={12} />
-                          {loc.lastClean > 0 ? (
-                             <span>
-                               {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                             </span>
-                          ) : '--:--'}
-                       </div>
-                       {expandedLocationId === loc.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </div>
+             {/* Add Location Form */}
+             {isAddingLocation && (
+               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4 animate-fade-in">
+                 <h3 className="font-bold text-sm text-slate-700 mb-3">{language === 'zh' ? '添加新点位' : 'Add New Location'}</h3>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                   <input 
+                     placeholder={language === 'zh' ? '点位名称 (如: 卫生间)' : 'Location Name'}
+                     className="p-2 text-sm border rounded focus:ring-2 focus:ring-brand-500"
+                     value={newLocNameZh}
+                     onChange={e => setNewLocNameZh(e.target.value)}
+                   />
+                    <input 
+                     placeholder={language === 'zh' ? '区域 (如: 1楼)' : 'Zone'}
+                     className="p-2 text-sm border rounded focus:ring-2 focus:ring-brand-500"
+                     value={newLocZone}
+                     onChange={e => setNewLocZone(e.target.value)}
+                   />
+                   <div className="flex items-center gap-2">
+                     <span className="text-xs text-slate-500 whitespace-nowrap">{language === 'zh' ? '日目标:' : 'Daily Target:'}</span>
+                     <input 
+                       type="number"
+                       className="p-2 text-sm border rounded w-20 focus:ring-2 focus:ring-brand-500"
+                       value={newLocTarget}
+                       onChange={e => setNewLocTarget(e.target.value)}
+                     />
+                   </div>
                  </div>
-
-                 {/* Expanded Details Mobile */}
-                 {expandedLocationId === loc.id && renderLogDetails(loc)}
+                 <div className="flex justify-end">
+                   <button 
+                     onClick={handleConfirmAddLocation}
+                     className="bg-brand-600 text-white text-sm font-bold px-4 py-2 rounded hover:bg-brand-700"
+                   >
+                     {language === 'zh' ? '确认添加' : 'Add Location'}
+                   </button>
+                 </div>
                </div>
-             ))}
-          </div>
-          
-          {/* --- DESKTOP TABLE VIEW (Hidden on mobile) --- */}
-          <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium">
-                  <tr>
-                    <th className="px-6 py-4">{t.location}</th>
-                    <th className="px-6 py-4">{t.zone}</th>
-                    <th className="px-6 py-4">{t.status}</th>
-                    <th className="px-6 py-4">{t.progress}</th>
-                    <th className="px-6 py-4">{t.lastCleaned}</th>
-                    <th className="w-8 px-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredLocations.map((loc) => (
-                    <React.Fragment key={loc.id}>
-                      <tr 
-                        onClick={() => toggleRow(loc.id)} 
-                        className={`transition-colors cursor-pointer group ${expandedLocationId === loc.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
-                      >
-                        <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-2">
-                           {loc.displayName}
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          <span className="px-2 py-1 bg-slate-100 rounded text-xs">
-                            {loc.zone}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {renderStatusBadge(loc)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                <div 
-                                  className={`h-1.5 rounded-full ${
-                                    loc.isOverachieved ? 'bg-indigo-500' : 
-                                    loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
-                                  }`} 
-                                  style={{ width: `${Math.min(loc.percentage, 100)}%` }}
-                                />
+             )}
+
+            {/* --- DESKTOP TABLE VIEW --- */}
+            <div className="hidden md:block overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-medium border-y border-slate-100">
+                    <tr>
+                      <th className="px-6 py-4">{t.location}</th>
+                      <th className="px-6 py-4">{t.zone}</th>
+                      <th className="px-6 py-4">{t.status}</th>
+                      <th className="px-6 py-4">{t.progress}</th>
+                      <th className="px-6 py-4">{t.lastCleaned}</th>
+                      <th className="w-8 px-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredLocations.map((loc) => (
+                      <React.Fragment key={loc.id}>
+                        <tr 
+                          onClick={() => toggleRow(loc.id)} 
+                          className={`transition-colors cursor-pointer group ${expandedLocationId === loc.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}
+                        >
+                          <td className="px-6 py-4 font-medium text-slate-800 flex items-center gap-2">
+                             {loc.displayName}
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">
+                            <span className="px-2 py-1 bg-slate-100 rounded text-xs">
+                              {loc.zone}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {renderStatusBadge(loc)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                  <div 
+                                    className={`h-1.5 rounded-full ${
+                                      loc.isOverachieved ? 'bg-indigo-500' : 
+                                      loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                                    }`} 
+                                    style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-slate-500 font-medium">
+                                  {loc.count} / {loc.periodTarget}
+                                  
+                                  {daysDiff === 1 && (
+                                      editingLocationId === loc.id ? (
+                                          <span className="inline-flex items-center ml-1" onClick={e => e.stopPropagation()}>
+                                          <input 
+                                              type="number" 
+                                              className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                              value={editTargetFreq}
+                                              onChange={(e) => setEditTargetFreq(e.target.value)}
+                                              autoFocus
+                                              onBlur={() => handleSaveLocation(loc)}
+                                              onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
+                                          />
+                                          </span>
+                                      ) : (
+                                          <span 
+                                          className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
+                                          onClick={(e) => handleStartEditLocation(e, loc)}
+                                          title={t.editTarget}
+                                          >
+                                          <Edit size={10} />
+                                          </span>
+                                      )
+                                  )}
+                                </span>
                               </div>
-                              <span className="text-xs text-slate-500 font-medium">
-                                {loc.count} / {loc.periodTarget}
-                                
-                                {daysDiff === 1 && (
-                                    editingLocationId === loc.id ? (
-                                        <span className="inline-flex items-center ml-1" onClick={e => e.stopPropagation()}>
-                                        <input 
-                                            type="number" 
-                                            className="w-12 h-6 px-1 text-xs border border-brand-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                            value={editTargetFreq}
-                                            onChange={(e) => setEditTargetFreq(e.target.value)}
-                                            autoFocus
-                                            onBlur={() => handleSaveLocation(loc)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSaveLocation(loc)}
-                                        />
-                                        </span>
-                                    ) : (
-                                        <span 
-                                        className="ml-1 px-1 py-0.5 hover:bg-slate-100 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-colors opacity-50 hover:opacity-100"
-                                        onClick={(e) => handleStartEditLocation(e, loc)}
-                                        title={t.editTarget}
-                                        >
-                                        <Edit size={10} />
-                                        </span>
-                                    )
-                                )}
-                              </span>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          {loc.lastClean > 0 ? (
-                             <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
-                               <Clock size={12} />
-                               {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                               {daysDiff > 1 && <span className="text-[10px] text-slate-400">({new Date(loc.lastClean).getMonth()+1}/{new Date(loc.lastClean).getDate()})</span>}
-                             </span>
-                          ) : (
-                            <span className="text-slate-400 italic">--</span>
-                          )}
-                        </td>
-                        <td className="px-2">
-                           {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
-                        </td>
-                      </tr>
-                      
-                      {/* Expanded Detail View Desktop */}
-                      {expandedLocationId === loc.id && (
-                        <tr className="bg-slate-50 border-b border-slate-100 shadow-inner">
-                          <td colSpan={6} className="p-0">
-                             {renderLogDetails(loc)}
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">
+                            {loc.lastClean > 0 ? (
+                               <span className="flex items-center gap-1" title={new Date(loc.lastClean).toLocaleString()}>
+                                 <Clock size={12} />
+                                 {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                               </span>
+                            ) : (
+                              <span className="text-slate-400 italic">--</span>
+                            )}
+                          </td>
+                          <td className="px-2">
+                             {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+                        
+                        {/* Expanded Detail View Desktop */}
+                        {expandedLocationId === loc.id && (
+                          <tr className="bg-slate-50 border-b border-slate-100 shadow-inner">
+                            <td colSpan={6} className="p-0">
+                               {renderLogDetails(loc)}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                    {filteredLocations.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-slate-400 italic">
+                          {language === 'zh' ? '暂无点位，请点击右上角 + 添加' : 'No locations found. Click + to add.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* --- MOBILE CARD VIEW --- */}
+            <div className="md:hidden space-y-3 mt-4">
+              {filteredLocations.map(loc => (
+                <div 
+                  key={loc.id} 
+                  className={`bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden transition-all ${
+                    expandedLocationId === loc.id ? 'ring-2 ring-brand-100' : ''
+                  }`}
+                  onClick={() => toggleRow(loc.id)}
+                >
+                  <div className="p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="pr-2">
+                            <h3 className="font-bold text-slate-800 text-sm leading-tight">{loc.displayName}</h3>
+                            <span className="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] rounded">
+                              {loc.zone}
+                            </span>
+                        </div>
+                        <div className="shrink-0">
+                            {renderStatusBadge(loc)}
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                            <span>{t.progress}</span>
+                            <span className="font-mono">{loc.count} / {loc.periodTarget}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                loc.isOverachieved ? 'bg-indigo-500' : 
+                                loc.isAtRisk ? 'bg-red-500' : 'bg-brand-500'
+                              }`} 
+                              style={{ width: `${Math.min(loc.percentage, 100)}%` }}
+                            />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs text-slate-400">
+                        <div className="flex items-center gap-1">
+                            <Clock size={12} />
+                            {loc.lastClean > 0 ? (
+                              <span>
+                                {new Date(loc.lastClean).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                            ) : '--:--'}
+                        </div>
+                        {expandedLocationId === loc.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                  </div>
+
+                  {/* Expanded Details Mobile */}
+                  {expandedLocationId === loc.id && renderLogDetails(loc)}
+                </div>
+              ))}
+               {filteredLocations.length === 0 && (
+                  <div className="text-center py-8 text-slate-400 italic">
+                    {language === 'zh' ? '暂无点位，请点击右上角 + 添加' : 'No locations found. Click + to add.'}
+                  </div>
+               )}
             </div>
           </div>
         </div>
@@ -595,16 +630,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {t.teamManagement}
               </h2>
               <button 
-                onClick={() => setIsAdding(!isAdding)}
+                onClick={() => setIsAddingCleaner(!isAddingCleaner)}
                 className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors border border-transparent hover:border-brand-100"
                 title="Add Cleaner"
               >
-                {isAdding ? <X size={20} className="text-slate-400" /> : <Plus size={20} />}
+                {isAddingCleaner ? <X size={20} className="text-slate-400" /> : <Plus size={20} />}
               </button>
             </div>
 
             {/* Add New Cleaner Form */}
-            {isAdding && (
+            {isAddingCleaner && (
               <div className="bg-brand-50 p-3 rounded-lg mb-4 border border-brand-100 animate-fade-in">
                 <p className="text-xs font-bold text-brand-700 mb-2">
                   {language === 'zh' ? '添加新保洁员' : 'Add New Cleaner'}
@@ -614,18 +649,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                     type="text" 
                     placeholder={language === 'zh' ? '姓名' : 'Name'}
                     className="w-full text-xs p-2 border border-slate-200 rounded focus:ring-2 focus:ring-brand-500 outline-none"
-                    value={newName}
-                    onChange={e => setNewName(e.target.value)}
+                    value={newCleanerName}
+                    onChange={e => setNewCleanerName(e.target.value)}
                   />
                   <input 
                     type="text" 
                     placeholder={language === 'zh' ? '设置密码' : 'Set Password'}
                     className="w-full text-xs p-2 border border-slate-200 rounded focus:ring-2 focus:ring-brand-500 outline-none"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    value={newCleanerPassword}
+                    onChange={e => setNewCleanerPassword(e.target.value)}
                   />
                   <button 
-                    onClick={handleConfirmAdd}
+                    onClick={handleConfirmAddCleaner}
                     className="w-full bg-brand-600 text-white text-xs font-bold py-2 rounded hover:bg-brand-700"
                   >
                     {language === 'zh' ? '确认添加' : 'Confirm Add'}
@@ -696,7 +731,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               
               {cleaners.length === 0 && (
                 <div className="text-center py-4 text-slate-400 text-xs italic">
-                  No cleaners found. Click + to add.
+                  {language === 'zh' ? '暂无保洁员' : 'No cleaners found.'}
                 </div>
               )}
             </div>

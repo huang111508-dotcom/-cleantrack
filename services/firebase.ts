@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp, FirebaseApp, FirebaseOptions } from 'firebase/app';
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -11,9 +12,11 @@ import {
   setDoc,
   deleteDoc,
   getDocs,
-  writeBatch
+  writeBatch,
+  where,
+  DocumentReference
 } from 'firebase/firestore';
-import { CleaningLog, Cleaner, Location, FirebaseConfig } from '../types';
+import { CleaningLog, Cleaner, Location, Manager, FirebaseConfig } from '../types';
 
 // Hardcoded configuration provided by user
 const DEFAULT_CONFIG: FirebaseOptions = {
@@ -25,6 +28,8 @@ const DEFAULT_CONFIG: FirebaseOptions = {
   appId: "1:544577111564:web:ce05d67d8d889e5c6d9029",
   measurementId: "G-CD8YYGJ0PG"
 };
+
+const LEGACY_MANAGER_ID = "demo-mgr"; // The ID used in constants.ts
 
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
@@ -57,12 +62,22 @@ export const initFirebase = (): boolean => {
 
 // --- Data Operations ---
 
-export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void) => {
+export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, managerId?: string) => {
   if (!db) return () => {};
 
-  const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+  let q;
+  if (managerId) {
+    // If managerId is provided, filter logs
+    q = query(
+      collection(db, 'logs'), 
+      where('managerId', '==', managerId),
+      orderBy('timestamp', 'desc')
+    );
+  } else {
+    // Fallback or Master view (optional)
+    q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+  }
   
-  // Real-time listener
   const unsubscribe = onSnapshot(q, (snapshot) => {
     const logs: CleaningLog[] = [];
     snapshot.forEach((doc) => {
@@ -78,10 +93,15 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void) => {
 };
 
 // NEW: Manual fetch for when real-time sync hiccups
-export const fetchLogs = async (): Promise<CleaningLog[]> => {
+export const fetchLogs = async (managerId?: string): Promise<CleaningLog[]> => {
   if (!db) return [];
   try {
-    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+    let q;
+    if (managerId) {
+      q = query(collection(db, 'logs'), where('managerId', '==', managerId), orderBy('timestamp', 'desc'));
+    } else {
+      q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+    }
     const snapshot = await getDocs(q);
     const logs: CleaningLog[] = [];
     snapshot.forEach((doc) => {
@@ -110,12 +130,46 @@ export const addCleaningLog = async (log: CleaningLog) => {
   }
 };
 
+// --- Managers Operations (NEW) ---
+
+export const subscribeToManagers = (callback: (managers: Manager[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'managers'));
+  return onSnapshot(q, (snapshot) => {
+    const managers: Manager[] = [];
+    snapshot.forEach((doc) => {
+      managers.push({ id: doc.id, ...doc.data() } as Manager);
+    });
+    callback(managers);
+  });
+};
+
+export const addNewManager = async (name: string, departmentName: string, password: string): Promise<void> => {
+  if (!db) return;
+  const newId = `mgr-${Date.now()}`;
+  const newManager: Manager = { id: newId, name, departmentName, password };
+  await setDoc(doc(db, 'managers', newId), newManager);
+};
+
+export const deleteManager = async (id: string): Promise<void> => {
+  if (!db) return;
+  await deleteDoc(doc(db, 'managers', id));
+  // Note: ideally should cascading delete cleaners/locations, but keeping simple for now
+};
+
+
 // --- Cleaners Operations ---
 
-export const subscribeToCleaners = (callback: (cleaners: Cleaner[]) => void) => {
+export const subscribeToCleaners = (callback: (cleaners: Cleaner[]) => void, managerId?: string) => {
   if (!db) return () => {};
 
-  const q = query(collection(db, 'cleaners'));
+  let q;
+  if (managerId) {
+    q = query(collection(db, 'cleaners'), where('managerId', '==', managerId));
+  } else {
+    q = query(collection(db, 'cleaners'));
+  }
+
   return onSnapshot(q, (snapshot) => {
     const cleaners: Cleaner[] = [];
     snapshot.forEach((doc) => {
@@ -136,17 +190,17 @@ export const updateCleaner = async (cleaner: Cleaner) => {
   }
 };
 
-export const addNewCleaner = async (name: string, password: string): Promise<void> => {
+export const addNewCleaner = async (managerId: string, name: string, password: string): Promise<void> => {
   if (!db) return;
   try {
     const newId = `c-${Date.now()}`;
-    // Random avatar selection
     const avatarId = Math.floor(Math.random() * 70) + 1;
     const newCleaner: Cleaner = {
       id: newId,
+      managerId, // Scoped to manager
       name: name,
       password: password,
-      avatar: `https://i.pravatar.cc/150?img=${avatarId}` // Using stable avatar service
+      avatar: `https://i.pravatar.cc/150?img=${avatarId}` 
     };
     
     await setDoc(doc(db, 'cleaners', newId), newCleaner);
@@ -166,43 +220,30 @@ export const deleteCleaner = async (id: string): Promise<void> => {
   }
 };
 
-export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {
-  if (!db) return;
-  const colRef = collection(db, 'cleaners');
-  const snapshot = await getDocs(colRef);
-  
-  if (snapshot.empty) {
-    const batch = writeBatch(db);
-    defaultCleaners.forEach(c => {
-      const docRef = doc(colRef, c.id);
-      batch.set(docRef, c);
-    });
-    await batch.commit();
-  }
-};
+// --- Locations Operations ---
 
-// --- Locations Operations (NEW) ---
-
-export const subscribeToLocations = (callback: (locations: Location[]) => void) => {
+export const subscribeToLocations = (callback: (locations: Location[]) => void, managerId?: string) => {
   if (!db) return () => {};
 
-  const q = query(collection(db, 'locations'));
+  let q;
+  if (managerId) {
+    q = query(collection(db, 'locations'), where('managerId', '==', managerId));
+  } else {
+    q = query(collection(db, 'locations'));
+  }
+
   return onSnapshot(q, (snapshot) => {
     const locations: Location[] = [];
     snapshot.forEach((doc) => {
       locations.push({ id: doc.id, ...doc.data() } as Location);
     });
-    // Sort logic to keep order consistent (by ID or name)
+    // Sort logic to keep order consistent
     locations.sort((a,b) => {
-      // Try to sort naturally by ID number if possible (loc1, loc2...)
       const numA = parseInt(a.id.replace('loc', '')) || 0;
       const numB = parseInt(b.id.replace('loc', '')) || 0;
       return numA - numB;
     });
-    
-    if (locations.length > 0) {
-        callback(locations);
-    }
+    callback(locations);
   });
 };
 
@@ -211,35 +252,52 @@ export const updateLocation = async (location: Location) => {
   try {
     const docRef = doc(db, 'locations', location.id);
     await setDoc(docRef, location, { merge: true });
-    console.log("Updated location:", location.nameEn);
   } catch (e) {
     console.error("Error updating location:", e);
   }
 };
 
-export const seedLocationsIfEmpty = async (defaultLocations: Location[]) => {
+export const addNewLocation = async (managerId: string, nameZh: string, nameEn: string, zone: string, target: number) => {
   if (!db) return;
-  const colRef = collection(db, 'locations');
-  const snapshot = await getDocs(colRef);
-  
-  // If empty, or count is vastly different (simple check), seed.
-  // We prefer to seed only if empty to avoid overwriting user changes.
-  if (snapshot.empty) {
-    console.log("Seeding locations to cloud...");
-    const batch = writeBatch(db);
-    defaultLocations.forEach(l => {
-      const docRef = doc(colRef, l.id);
-      batch.set(docRef, l);
-    });
-    await batch.commit();
-  }
+  const newId = `loc-${Date.now()}`;
+  const newLocation: Location = {
+    id: newId,
+    managerId,
+    nameZh,
+    nameEn,
+    zone,
+    targetDailyFrequency: target
+  };
+  await setDoc(doc(db, 'locations', newId), newLocation);
+}
+
+export const deleteLocation = async (id: string) => {
+  if (!db) return;
+  await deleteDoc(doc(db, 'locations', id));
+}
+
+// Seed data is now simpler or manager specific - keeping basic seed for backward compatibility if needed, 
+// but for multi-tenant, we usually start empty or use specific initialization.
+// We will skip auto-seeding hardcoded locations for new managers to let them customize.
+
+export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {
+   // Legacy support only
 };
 
+export const seedLocationsIfEmpty = async (defaultLocations: Location[]) => {
+   // Legacy support only
+};
 
-export const clearAllLogs = async () => {
+export const clearAllLogs = async (managerId?: string) => {
   if (!db) return;
   const colRef = collection(db, 'logs');
-  const snapshot = await getDocs(colRef);
+  let q;
+  if (managerId) {
+    q = query(colRef, where('managerId', '==', managerId));
+  } else {
+    q = query(colRef);
+  }
+  const snapshot = await getDocs(q);
   const batch = writeBatch(db);
   
   snapshot.docs.forEach((doc) => {
@@ -247,6 +305,61 @@ export const clearAllLogs = async () => {
   });
   
   await batch.commit();
+};
+
+// --- DATA MIGRATION UTILITIES ---
+
+export const getLegacyDataStats = async () => {
+  if (!db) return { locations: 0, cleaners: 0, logs: 0 };
+  
+  try {
+    const locSnap = await getDocs(query(collection(db, 'locations'), where('managerId', '==', LEGACY_MANAGER_ID)));
+    const cleanSnap = await getDocs(query(collection(db, 'cleaners'), where('managerId', '==', LEGACY_MANAGER_ID)));
+    const logSnap = await getDocs(query(collection(db, 'logs'), where('managerId', '==', LEGACY_MANAGER_ID)));
+
+    return {
+      locations: locSnap.size,
+      cleaners: cleanSnap.size,
+      logs: logSnap.size
+    };
+  } catch (e) {
+    console.error("Error getting legacy stats", e);
+    return { locations: 0, cleaners: 0, logs: 0 };
+  }
+};
+
+export const migrateLegacyData = async (targetManagerId: string): Promise<boolean> => {
+  if (!db) return false;
+  
+  try {
+    const locSnap = await getDocs(query(collection(db, 'locations'), where('managerId', '==', LEGACY_MANAGER_ID)));
+    const cleanSnap = await getDocs(query(collection(db, 'cleaners'), where('managerId', '==', LEGACY_MANAGER_ID)));
+    const logSnap = await getDocs(query(collection(db, 'logs'), where('managerId', '==', LEGACY_MANAGER_ID)));
+
+    const allDocs: DocumentReference[] = [];
+    
+    locSnap.forEach(d => allDocs.push(d.ref));
+    cleanSnap.forEach(d => allDocs.push(d.ref));
+    logSnap.forEach(d => allDocs.push(d.ref));
+
+    if (allDocs.length === 0) return true;
+
+    // Firestore batch limit is 500 operations
+    const CHUNK_SIZE = 450; 
+    for (let i = 0; i < allDocs.length; i += CHUNK_SIZE) {
+      const chunk = allDocs.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(ref => {
+        batch.update(ref, { managerId: targetManagerId });
+      });
+      await batch.commit();
+    }
+    
+    return true;
+  } catch (e) {
+    console.error("Migration failed", e);
+    return false;
+  }
 };
 
 export const getStoredConfig = (): FirebaseConfig | null => null;

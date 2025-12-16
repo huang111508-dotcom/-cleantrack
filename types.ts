@@ -1,25 +1,36 @@
+
 export type Language = 'en' | 'zh';
 
-export type UserRole = 'manager' | 'cleaner' | null;
+export type UserRole = 'master' | 'manager' | 'cleaner' | null;
+
+export interface Manager {
+  id: string;
+  name: string;
+  departmentName: string;
+  password?: string;
+}
 
 export interface Cleaner {
   id: string;
+  managerId: string; // Links cleaner to a specific department manager
   name: string;
   avatar: string;
-  password?: string; // Added password field
+  password?: string; 
 }
 
 export interface Location {
   id: string;
+  managerId: string; // Links location to a specific department manager
   nameEn: string;
   nameZh: string;
-  zone: string; // Keeping zone simple (can be used for filtering)
+  zone: string; 
   targetDailyFrequency: number; 
-  lastCleaned?: number; // timestamp
+  lastCleaned?: number; 
 }
 
 export interface CleaningLog {
   id: string;
+  managerId: string; // Links log to a specific department manager
   locationId: string;
   cleanerId: string;
   timestamp: number;
@@ -27,7 +38,7 @@ export interface CleaningLog {
   notes?: string;
 }
 
-export type ViewState = 'dashboard' | 'cleaner-scan' | 'admin-reports' | 'qr-print';
+export type ViewState = 'dashboard' | 'cleaner-scan' | 'admin-reports' | 'qr-print' | 'master-dashboard';
 
 export interface Alert {
   locationId: string;

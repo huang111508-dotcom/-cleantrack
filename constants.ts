@@ -3,34 +3,36 @@ import { Cleaner, Location, CleaningLog } from './types';
 // Updated Manager Password
 export const DEFAULT_MANAGER_PASSWORD = "admin888";
 
+const DEMO_MANAGER_ID = "demo-mgr";
+
 export const CLEANERS: Cleaner[] = [
-  { id: 'c1', name: 'John Doe', avatar: 'https://picsum.photos/100/100?random=1', password: '123' },
-  { id: 'c2', name: 'Jane Smith', avatar: 'https://picsum.photos/100/100?random=2', password: '123' },
-  { id: 'c3', name: 'Mike Johnson', avatar: 'https://picsum.photos/100/100?random=3', password: '123' },
+  { id: 'c1', managerId: DEMO_MANAGER_ID, name: 'John Doe', avatar: 'https://picsum.photos/100/100?random=1', password: '123' },
+  { id: 'c2', managerId: DEMO_MANAGER_ID, name: 'Jane Smith', avatar: 'https://picsum.photos/100/100?random=2', password: '123' },
+  { id: 'c3', managerId: DEMO_MANAGER_ID, name: 'Mike Johnson', avatar: 'https://picsum.photos/100/100?random=3', password: '123' },
 ];
 
 // Set all defaults to 20 as requested
 export const LOCATIONS: Location[] = [
-  { id: 'loc1', nameZh: '广场', nameEn: 'Outdoor Square', zone: 'Outdoor', targetDailyFrequency: 20 },
-  { id: 'loc2', nameZh: '入口（包含购物车购物篮）', nameEn: 'Entrance & Carts', zone: 'Entrance', targetDailyFrequency: 20 },
-  { id: 'loc3', nameZh: '右边走廊', nameEn: 'Right Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc4', nameZh: '2号台及粮油通道', nameEn: 'Checkout 2 & Grains/Oil', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc5', nameZh: '食品区通道', nameEn: 'Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc6', nameZh: '3号、4号收银机台', nameEn: 'Checkout 3 & 4', zone: 'Front End', targetDailyFrequency: 20 },
-  { id: 'loc7', nameZh: '冰品区', nameEn: 'Ice Cream Zone', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc8', nameZh: '转盘区走廊', nameEn: 'Turntable Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc9', nameZh: '百货区', nameEn: 'General Merchandise', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc10', nameZh: '卫生间', nameEn: 'Restroom', zone: 'Facilities', targetDailyFrequency: 20 },
-  { id: 'loc11', nameZh: '卫生巾、纸巾、米粉区副通道', nameEn: 'Hygiene & Baby Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc12', nameZh: '左边走廊', nameEn: 'Left Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc13', nameZh: '1号台5号台', nameEn: 'Checkout 1 & 5', zone: 'Front End', targetDailyFrequency: 20 },
-  { id: 'loc14', nameZh: '干货和冻品区主通道（含半圆垃圾桶、果切区）', nameEn: 'Dry/Frozen Main Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc15', nameZh: '蔬果区', nameEn: 'Produce Section', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc16', nameZh: '水产区', nameEn: 'Seafood Section', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc17', nameZh: '肉品区', nameEn: 'Meat Section', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc18', nameZh: '调料区', nameEn: 'Condiments Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
-  { id: 'loc19', nameZh: '熟食烘焙区（含半圆垃圾桶）', nameEn: 'Deli & Bakery', zone: 'Fresh', targetDailyFrequency: 20 },
-  { id: 'loc20', nameZh: '饮料区', nameEn: 'Beverage Section', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc1', managerId: DEMO_MANAGER_ID, nameZh: '广场', nameEn: 'Outdoor Square', zone: 'Outdoor', targetDailyFrequency: 20 },
+  { id: 'loc2', managerId: DEMO_MANAGER_ID, nameZh: '入口（包含购物车购物篮）', nameEn: 'Entrance & Carts', zone: 'Entrance', targetDailyFrequency: 20 },
+  { id: 'loc3', managerId: DEMO_MANAGER_ID, nameZh: '右边走廊', nameEn: 'Right Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc4', managerId: DEMO_MANAGER_ID, nameZh: '2号台及粮油通道', nameEn: 'Checkout 2 & Grains/Oil', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc5', managerId: DEMO_MANAGER_ID, nameZh: '食品区通道', nameEn: 'Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc6', managerId: DEMO_MANAGER_ID, nameZh: '3号、4号收银机台', nameEn: 'Checkout 3 & 4', zone: 'Front End', targetDailyFrequency: 20 },
+  { id: 'loc7', managerId: DEMO_MANAGER_ID, nameZh: '冰品区', nameEn: 'Ice Cream Zone', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc8', managerId: DEMO_MANAGER_ID, nameZh: '转盘区走廊', nameEn: 'Turntable Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc9', managerId: DEMO_MANAGER_ID, nameZh: '百货区', nameEn: 'General Merchandise', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc10', managerId: DEMO_MANAGER_ID, nameZh: '卫生间', nameEn: 'Restroom', zone: 'Facilities', targetDailyFrequency: 20 },
+  { id: 'loc11', managerId: DEMO_MANAGER_ID, nameZh: '卫生巾、纸巾、米粉区副通道', nameEn: 'Hygiene & Baby Food Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc12', managerId: DEMO_MANAGER_ID, nameZh: '左边走廊', nameEn: 'Left Corridor', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc13', managerId: DEMO_MANAGER_ID, nameZh: '1号台5号台', nameEn: 'Checkout 1 & 5', zone: 'Front End', targetDailyFrequency: 20 },
+  { id: 'loc14', managerId: DEMO_MANAGER_ID, nameZh: '干货和冻品区主通道（含半圆垃圾桶、果切区）', nameEn: 'Dry/Frozen Main Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc15', managerId: DEMO_MANAGER_ID, nameZh: '蔬果区', nameEn: 'Produce Section', zone: 'Fresh', targetDailyFrequency: 20 },
+  { id: 'loc16', managerId: DEMO_MANAGER_ID, nameZh: '水产区', nameEn: 'Seafood Section', zone: 'Fresh', targetDailyFrequency: 20 },
+  { id: 'loc17', managerId: DEMO_MANAGER_ID, nameZh: '肉品区', nameEn: 'Meat Section', zone: 'Fresh', targetDailyFrequency: 20 },
+  { id: 'loc18', managerId: DEMO_MANAGER_ID, nameZh: '调料区', nameEn: 'Condiments Aisle', zone: 'Sales Floor', targetDailyFrequency: 20 },
+  { id: 'loc19', managerId: DEMO_MANAGER_ID, nameZh: '熟食烘焙区（含半圆垃圾桶）', nameEn: 'Deli & Bakery', zone: 'Fresh', targetDailyFrequency: 20 },
+  { id: 'loc20', managerId: DEMO_MANAGER_ID, nameZh: '饮料区', nameEn: 'Beverage Section', zone: 'Sales Floor', targetDailyFrequency: 20 },
 ];
 
 export const TRANSLATIONS = {
@@ -180,6 +182,7 @@ export const generateInitialLogs = (): CleaningLog[] => {
       logs.push({
         id: `log-${loc.id}-${i}`,
         locationId: loc.id,
+        managerId: DEMO_MANAGER_ID,
         cleanerId: CLEANERS[Math.floor(Math.random() * CLEANERS.length)].id,
         timestamp: time,
         status: 'completed'
