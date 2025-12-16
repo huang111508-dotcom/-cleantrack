@@ -41,6 +41,8 @@ const App: React.FC = () => {
   // Session State
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
   const [currentManager, setCurrentManager] = useState<Manager | undefined>(undefined);
+  // NEW: State for Master Admin to track which department they are viewing
+  const [masterSelectedManagerId, setMasterSelectedManagerId] = useState<string | null>(null);
   
   const [view, setView] = useState<ViewState>('dashboard');
   const [language, setLanguage] = useState<Language>('zh'); 
@@ -49,6 +51,13 @@ const App: React.FC = () => {
   const [isCloudMode, setIsCloudMode] = useState(true);
 
   const t = TRANSLATIONS[language];
+
+  // Helper to determine which manager ID to use for operations
+  const getActiveManagerId = () => {
+    if (currentUserRole === 'manager') return currentManager?.id;
+    if (currentUserRole === 'master') return masterSelectedManagerId;
+    return null;
+  };
 
   // 1. Initialize System & Master Subscriptions (Always Run)
   useEffect(() => {
@@ -83,10 +92,15 @@ const App: React.FC = () => {
         console.log("Subscribing to Cleaner Data for Manager:", currentCleaner.managerId);
         unsubLocations = subscribeToLocations(setLocationsList, currentCleaner.managerId);
     }
+    else if (currentUserRole === 'master' && masterSelectedManagerId) {
+        // --- Master View: Scoped to SELECTED Manager ID ---
+        console.log("Master subscribing to target Manager Data:", masterSelectedManagerId);
+        unsubLogs = subscribeToLogs(setLogs, masterSelectedManagerId);
+        unsubCleaners = subscribeToCleaners(setCleanersList, masterSelectedManagerId);
+        unsubLocations = subscribeToLocations(setLocationsList, masterSelectedManagerId);
+    }
     else if (!currentUserRole) {
         // --- Logged Out View (Login Screen) ---
-        // We need to fetch ALL cleaners so they appear in the dropdown when a department is selected.
-        // The filtering happens client-side in LoginScreen.tsx based on the selected Manager ID.
         console.log("Subscribing to ALL Cleaners for Login Screen");
         unsubCleaners = subscribeToCleaners((allCleaners) => {
           setCleanersList(allCleaners);
@@ -98,7 +112,7 @@ const App: React.FC = () => {
         unsubCleaners(); 
         unsubLocations(); 
     };
-  }, [currentUserRole, currentManager, currentCleaner, isCloudMode]);
+  }, [currentUserRole, currentManager, currentCleaner, masterSelectedManagerId, isCloudMode]);
 
 
   // Actions
@@ -112,6 +126,7 @@ const App: React.FC = () => {
       setView('dashboard');
     } else if (role === 'master') {
       setView('master-dashboard');
+      setMasterSelectedManagerId(null); // Reset selection on login
     }
   };
 
@@ -119,6 +134,7 @@ const App: React.FC = () => {
     setCurrentUserRole(null);
     setCurrentCleaner(undefined);
     setCurrentManager(undefined);
+    setMasterSelectedManagerId(null);
     setView('dashboard'); // reset view
     // Clear data to prevent flashing old data on re-login
     setLogs([]);
@@ -138,10 +154,13 @@ const App: React.FC = () => {
   const handleDeleteManager = async (id: string) => {
     if(confirm(language === 'zh' ? '确定删除该部门及其管理员吗？' : 'Delete this department?')) {
       await deleteManager(id);
+      if (masterSelectedManagerId === id) {
+        setMasterSelectedManagerId(null);
+      }
     }
   };
 
-  // --- MANAGER ACTIONS ---
+  // --- DATA ACTIONS (Shared between Manager and Master) ---
 
   const handleUpdateCleaner = async (updatedCleaner: Cleaner) => {
     await updateCleaner(updatedCleaner);
@@ -152,8 +171,9 @@ const App: React.FC = () => {
   };
 
   const handleAddCleaner = async (name: string, password: string) => {
-    if (currentManager) {
-      await addNewCleaner(currentManager.id, name, password);
+    const targetId = getActiveManagerId();
+    if (targetId) {
+      await addNewCleaner(targetId, name, password);
     }
   };
 
@@ -164,8 +184,9 @@ const App: React.FC = () => {
   };
 
   const handleAddLocation = async (nameZh: string, nameEn: string, zone: string, target: number) => {
-    if (currentManager) {
-        await addNewLocation(currentManager.id, nameZh, nameEn, zone, target);
+    const targetId = getActiveManagerId();
+    if (targetId) {
+        await addNewLocation(targetId, nameZh, nameEn, zone, target);
     }
   }
 
@@ -189,15 +210,13 @@ const App: React.FC = () => {
   };
 
   const handleResetData = async () => {
-    if(confirm(t.resetConfirm)) {
-      if (currentManager) {
-        await clearAllLogs(currentManager.id);
-      }
+    const targetId = getActiveManagerId();
+    if (targetId && confirm(t.resetConfirm)) {
+      await clearAllLogs(targetId);
     }
   }
 
   const handleRefreshData = async () => {
-     // Trigger re-fetch logic if needed, largely handled by snapshot listeners
      console.log("Refreshing...");
   };
 
@@ -288,7 +307,10 @@ const App: React.FC = () => {
                     {/* Nav Items */}
                     <div className="flex bg-slate-100 rounded-lg p-1 hidden sm:flex">
                       <button
-                        onClick={() => setView(currentUserRole === 'master' ? 'master-dashboard' : 'dashboard')}
+                        onClick={() => {
+                          setView(currentUserRole === 'master' ? 'master-dashboard' : 'dashboard');
+                          if (currentUserRole === 'master') setMasterSelectedManagerId(null);
+                        }}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                           (view === 'dashboard' || view === 'master-dashboard') ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                         }`}
@@ -316,7 +338,7 @@ const App: React.FC = () => {
                         <Download size={14} />
                         {t.export}
                       </button>
-                      {currentUserRole === 'manager' && (
+                      {(currentUserRole === 'manager' || (currentUserRole === 'master' && masterSelectedManagerId)) && (
                         <button 
                             onClick={handleResetData} 
                             className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
@@ -351,6 +373,20 @@ const App: React.FC = () => {
                   onUpdateManager={handleUpdateManager}
                   onDeleteManager={handleDeleteManager}
                   language={language}
+                  // Props for Dashboard view within Master
+                  selectedManagerId={masterSelectedManagerId}
+                  onSelectManager={setMasterSelectedManagerId}
+                  locations={locationsList}
+                  logs={logs}
+                  cleaners={cleanersList}
+                  onUpdateCleaner={handleUpdateCleaner}
+                  onUpdateLocation={handleUpdateLocation}
+                  onAddCleaner={handleAddCleaner}
+                  onDeleteCleaner={handleDeleteCleaner}
+                  onAddLocation={handleAddLocation}
+                  onDeleteLocation={handleDeleteLocation}
+                  onRefresh={handleRefreshData}
+                  isCloudMode={isCloudMode}
                />
             )}
 
@@ -375,7 +411,7 @@ const App: React.FC = () => {
             
             {/* PRINT VIEW (Shared) */}
             {((currentUserRole === 'manager' && view === 'qr-print') || (currentUserRole === 'master' && view === 'qr-print')) && (
-              <QRCodeGenerator locations={currentUserRole === 'master' ? [] : locationsList} language={language} /> // Master doesn't see locations usually
+              <QRCodeGenerator locations={locationsList} language={language} />
             )}
 
             {/* CLEANER VIEW */}
