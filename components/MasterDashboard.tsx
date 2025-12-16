@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Manager, Language } from '../types';
+import { Manager, Language, CleaningLog, Cleaner, Location } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { getLegacyDataStats, migrateLegacyData } from '../services/firebase';
-import { Users, Building2, Plus, Trash2, Key, Database, ArrowRight, RefreshCw, AlertCircle, Edit, Save, X } from 'lucide-react';
+import Dashboard from './Dashboard';
+import { Users, Building2, Plus, Trash2, Key, Database, ArrowRight, RefreshCw, AlertCircle, Edit, Save, X, Eye, ChevronLeft } from 'lucide-react';
 
 interface MasterDashboardProps {
   managers: Manager[];
@@ -11,6 +12,23 @@ interface MasterDashboardProps {
   onUpdateManager: (manager: Manager) => void;
   onDeleteManager: (id: string) => void;
   language: Language;
+
+  // New props for Data Monitoring
+  selectedManagerId: string | null;
+  onSelectManager: (id: string | null) => void;
+  
+  // Dashboard Props (passed through)
+  locations: Location[];
+  logs: CleaningLog[];
+  cleaners: Cleaner[];
+  onUpdateCleaner: (updatedCleaner: Cleaner) => void;
+  onUpdateLocation: (updatedLocation: Location) => void; 
+  onAddCleaner: (name: string, password: string) => void;
+  onDeleteCleaner: (id: string) => void;
+  onAddLocation: (nameZh: string, nameEn: string, zone: string, target: number) => void;
+  onDeleteLocation: (id: string) => void;
+  onRefresh: () => void;
+  isCloudMode: boolean;
 }
 
 const MasterDashboard: React.FC<MasterDashboardProps> = ({ 
@@ -18,7 +36,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
   onAddManager, 
   onUpdateManager,
   onDeleteManager,
-  language 
+  language,
+  selectedManagerId,
+  onSelectManager,
+  ...dashboardProps // Pass remaining props to Dashboard
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -100,8 +121,34 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
 
   const hasLegacyData = legacyStats.locations > 0 || legacyStats.cleaners > 0 || legacyStats.logs > 0;
 
+  // --- VIEW MODE: DETAILED DEPARTMENT DASHBOARD ---
+  if (selectedManagerId) {
+    const selectedManager = managers.find(m => m.id === selectedManagerId);
+    return (
+      <div className="animate-fade-in">
+        <div className="mb-4">
+          <button 
+            onClick={() => onSelectManager(null)}
+            className="flex items-center gap-2 text-slate-500 hover:text-brand-600 font-medium transition-colors"
+          >
+            <ChevronLeft size={20} />
+            {language === 'zh' ? '返回部门列表' : 'Back to Department List'}
+          </button>
+        </div>
+        
+        {/* Render the standard Dashboard with Master privileges */}
+        <Dashboard 
+          {...dashboardProps}
+          departmentName={selectedManager?.departmentName || 'Unknown Department'}
+          language={language}
+        />
+      </div>
+    );
+  }
+
+  // --- VIEW MODE: MANAGER LIST (ADMIN) ---
   return (
-    <div className="max-w-4xl mx-auto p-4 animate-fade-in pb-20">
+    <div className="max-w-5xl mx-auto p-4 animate-fade-in pb-20">
       
       {/* 1. Header */}
       <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden mb-8">
@@ -167,105 +214,104 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
         )}
 
         <div className="p-6">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="text-slate-400 text-sm border-b border-slate-100">
-                <th className="py-3 px-2 font-medium">{language === 'zh' ? '部门' : 'Department'}</th>
-                <th className="py-3 px-2 font-medium">{language === 'zh' ? '管理员' : 'Manager'}</th>
-                <th className="py-3 px-2 font-medium">{language === 'zh' ? '密码' : 'Password'}</th>
-                <th className="py-3 px-2 text-right">{language === 'zh' ? '操作' : 'Actions'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {managers.map(mgr => (
-                <tr key={mgr.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  {editingId === mgr.id ? (
-                    // EDIT MODE
-                    <>
-                      <td className="py-4 px-2">
-                        <input 
-                          value={editDept}
-                          onChange={e => setEditDept(e.target.value)}
-                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
-                        />
-                      </td>
-                      <td className="py-4 px-2">
-                        <input 
-                          value={editName}
-                          onChange={e => setEditName(e.target.value)}
-                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
-                        />
-                      </td>
-                      <td className="py-4 px-2">
-                        <input 
-                          value={editPass}
-                          onChange={e => setEditPass(e.target.value)}
-                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
-                        />
-                      </td>
-                      <td className="py-4 px-2 text-right">
-                        <div className="flex justify-end gap-2">
-                           <button onClick={handleCancelEdit} className="p-2 text-slate-400 hover:bg-slate-100 rounded">
-                              <X size={18} />
-                           </button>
-                           <button onClick={() => handleSaveEdit(mgr)} className="p-2 bg-green-500 text-white hover:bg-green-600 rounded">
-                              <Save size={18} />
-                           </button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    // VIEW MODE
-                    <>
-                      <td className="py-4 px-2 font-bold text-slate-800">
-                        <div className="flex items-center gap-2">
-                           <Building2 size={16} className="text-slate-400" />
-                           {mgr.departmentName}
-                        </div>
-                      </td>
-                      <td className="py-4 px-2">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <Users size={16} className="text-slate-400" />
-                          {mgr.name}
-                        </div>
-                      </td>
-                      <td className="py-4 px-2 font-mono text-slate-500 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Key size={14} />
-                          {mgr.password}
-                        </div>
-                      </td>
-                      <td className="py-4 px-2 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button 
-                            onClick={() => handleStartEdit(mgr)}
-                            className="text-slate-400 hover:text-brand-600 p-2 hover:bg-brand-50 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button 
-                            onClick={() => onDeleteManager(mgr.id)}
-                            className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {managers.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-slate-400 italic">
-                    {language === 'zh' ? '暂无部门，请点击右上角添加。' : 'No departments found. Click "New Department" to start.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {managers.map(mgr => (
+              <div key={mgr.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative group">
+                {editingId === mgr.id ? (
+                  // EDIT MODE CARD
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] text-slate-400 uppercase font-bold">Dept Name</label>
+                      <input 
+                        value={editDept}
+                        onChange={e => setEditDept(e.target.value)}
+                        className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none text-sm"
+                      />
+                    </div>
+                    <div>
+                       <label className="text-[10px] text-slate-400 uppercase font-bold">Manager Name</label>
+                       <input 
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none text-sm"
+                      />
+                    </div>
+                    <div>
+                       <label className="text-[10px] text-slate-400 uppercase font-bold">Password</label>
+                       <input 
+                        value={editPass}
+                        onChange={e => setEditPass(e.target.value)}
+                        className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none text-sm"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 mt-2">
+                       <button onClick={handleCancelEdit} className="p-2 text-slate-400 hover:bg-slate-100 rounded">
+                          <X size={16} />
+                       </button>
+                       <button onClick={() => handleSaveEdit(mgr)} className="p-2 bg-green-500 text-white hover:bg-green-600 rounded">
+                          <Save size={16} />
+                       </button>
+                    </div>
+                  </div>
+                ) : (
+                  // VIEW MODE CARD
+                  <>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="bg-brand-50 text-brand-700 p-2 rounded-lg">
+                        <Building2 size={24} />
+                      </div>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => handleStartEdit(mgr)}
+                          className="text-slate-300 hover:text-brand-600 p-1.5 hover:bg-brand-50 rounded transition-colors"
+                          title="Edit"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => onDeleteManager(mgr.id)}
+                          className="text-slate-300 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <h3 className="font-bold text-lg text-slate-800 mb-1">{mgr.departmentName}</h3>
+                    
+                    <div className="flex items-center gap-2 text-slate-500 text-sm mb-1">
+                       <Users size={14} />
+                       <span>{mgr.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400 text-xs font-mono mb-4">
+                       <Key size={12} />
+                       <span>{mgr.password}</span>
+                    </div>
+
+                    <button
+                      onClick={() => onSelectManager(mgr.id)}
+                      className="w-full py-2 bg-slate-50 hover:bg-brand-600 hover:text-white text-slate-600 font-bold rounded-lg transition-all flex items-center justify-center gap-2 text-sm border border-slate-100"
+                    >
+                      <Eye size={16} />
+                      {language === 'zh' ? '查看数据 / 管理' : 'View Data / Manage'}
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+            
+            {/* Add New Placeholder */}
+            {managers.length === 0 && (
+                <div 
+                  onClick={() => setIsAdding(true)}
+                  className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center text-slate-400 cursor-pointer hover:border-brand-300 hover:text-brand-500 transition-colors min-h-[200px]"
+                >
+                    <Plus size={32} className="mb-2" />
+                    <span>{language === 'zh' ? '添加第一个部门' : 'Add First Department'}</span>
+                </div>
+            )}
+          </div>
         </div>
       </div>
 
