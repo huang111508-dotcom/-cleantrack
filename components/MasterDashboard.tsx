@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Manager, Language } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { getLegacyDataStats, migrateLegacyData } from '../services/firebase';
-import { Users, Building2, Plus, Trash2, Key, Database, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, Building2, Plus, Trash2, Key, Database, ArrowRight, RefreshCw, AlertCircle, Edit, Save, X } from 'lucide-react';
 
 interface MasterDashboardProps {
   managers: Manager[];
   onAddManager: (name: string, dept: string, pass: string) => void;
+  onUpdateManager: (manager: Manager) => void;
   onDeleteManager: (id: string) => void;
   language: Language;
 }
@@ -15,6 +16,7 @@ interface MasterDashboardProps {
 const MasterDashboard: React.FC<MasterDashboardProps> = ({ 
   managers, 
   onAddManager, 
+  onUpdateManager,
   onDeleteManager,
   language 
 }) => {
@@ -22,6 +24,12 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
   const [newName, setNewName] = useState('');
   const [newDept, setNewDept] = useState('');
   const [newPass, setNewPass] = useState('');
+
+  // Edit State
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [editPass, setEditPass] = useState('');
 
   // Migration State
   const [legacyStats, setLegacyStats] = useState({ locations: 0, cleaners: 0, logs: 0 });
@@ -46,6 +54,29 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
       setNewPass('');
       setIsAdding(false);
     }
+  };
+
+  const handleStartEdit = (mgr: Manager) => {
+    setEditingId(mgr.id);
+    setEditName(mgr.name);
+    setEditDept(mgr.departmentName);
+    setEditPass(mgr.password || '');
+  };
+
+  const handleSaveEdit = (mgr: Manager) => {
+    if (editName && editDept && editPass) {
+      onUpdateManager({
+        ...mgr,
+        name: editName,
+        departmentName: editDept,
+        password: editPass
+      });
+      setEditingId(null);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
   };
 
   const handleMigration = async () => {
@@ -148,31 +179,82 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
             <tbody>
               {managers.map(mgr => (
                 <tr key={mgr.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-2 font-bold text-slate-800 flex items-center gap-2">
-                    <Building2 size={16} className="text-slate-400" />
-                    {mgr.departmentName}
-                  </td>
-                  <td className="py-4 px-2">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <Users size={16} className="text-slate-400" />
-                      {mgr.name}
-                    </div>
-                  </td>
-                  <td className="py-4 px-2 font-mono text-slate-500 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Key size={14} />
-                      {mgr.password}
-                    </div>
-                  </td>
-                  <td className="py-4 px-2 text-right">
-                    <button 
-                      onClick={() => onDeleteManager(mgr.id)}
-                      className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+                  {editingId === mgr.id ? (
+                    // EDIT MODE
+                    <>
+                      <td className="py-4 px-2">
+                        <input 
+                          value={editDept}
+                          onChange={e => setEditDept(e.target.value)}
+                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
+                        />
+                      </td>
+                      <td className="py-4 px-2">
+                        <input 
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
+                        />
+                      </td>
+                      <td className="py-4 px-2">
+                        <input 
+                          value={editPass}
+                          onChange={e => setEditPass(e.target.value)}
+                          className="w-full p-2 border border-brand-300 rounded focus:ring-1 focus:ring-brand-500 outline-none"
+                        />
+                      </td>
+                      <td className="py-4 px-2 text-right">
+                        <div className="flex justify-end gap-2">
+                           <button onClick={handleCancelEdit} className="p-2 text-slate-400 hover:bg-slate-100 rounded">
+                              <X size={18} />
+                           </button>
+                           <button onClick={() => handleSaveEdit(mgr)} className="p-2 bg-green-500 text-white hover:bg-green-600 rounded">
+                              <Save size={18} />
+                           </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    // VIEW MODE
+                    <>
+                      <td className="py-4 px-2 font-bold text-slate-800">
+                        <div className="flex items-center gap-2">
+                           <Building2 size={16} className="text-slate-400" />
+                           {mgr.departmentName}
+                        </div>
+                      </td>
+                      <td className="py-4 px-2">
+                        <div className="flex items-center gap-2 text-slate-700">
+                          <Users size={16} className="text-slate-400" />
+                          {mgr.name}
+                        </div>
+                      </td>
+                      <td className="py-4 px-2 font-mono text-slate-500 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Key size={14} />
+                          {mgr.password}
+                        </div>
+                      </td>
+                      <td className="py-4 px-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button 
+                            onClick={() => handleStartEdit(mgr)}
+                            className="text-slate-400 hover:text-brand-600 p-2 hover:bg-brand-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button 
+                            onClick={() => onDeleteManager(mgr.id)}
+                            className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
               {managers.length === 0 && (

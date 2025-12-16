@@ -67,14 +67,15 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, manager
 
   let q;
   if (managerId) {
-    // If managerId is provided, filter logs
+    // FIX: Removing orderBy('timestamp') from the Firestore query when using where().
+    // Firestore requires a composite index for where() + orderBy(). 
+    // To avoid manual index creation for the user, we fetch by ID then sort in client-side JS.
     q = query(
       collection(db, 'logs'), 
-      where('managerId', '==', managerId),
-      orderBy('timestamp', 'desc')
+      where('managerId', '==', managerId)
     );
   } else {
-    // Fallback or Master view (optional)
+    // Fallback or Master view can use orderBy if no where clause conflicts
     q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
   }
   
@@ -83,6 +84,10 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, manager
     snapshot.forEach((doc) => {
       logs.push({ id: doc.id, ...doc.data() } as CleaningLog);
     });
+    
+    // Client-side sort to ensure correct order without complex indexes
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+
     console.log(`Synced ${logs.length} logs from cloud.`);
     callback(logs);
   }, (error) => {
@@ -98,7 +103,8 @@ export const fetchLogs = async (managerId?: string): Promise<CleaningLog[]> => {
   try {
     let q;
     if (managerId) {
-      q = query(collection(db, 'logs'), where('managerId', '==', managerId), orderBy('timestamp', 'desc'));
+      // Same fix as subscribeToLogs
+      q = query(collection(db, 'logs'), where('managerId', '==', managerId));
     } else {
       q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
     }
@@ -107,6 +113,10 @@ export const fetchLogs = async (managerId?: string): Promise<CleaningLog[]> => {
     snapshot.forEach((doc) => {
       logs.push({ id: doc.id, ...doc.data() } as CleaningLog);
     });
+    
+    // Client-side sort
+    logs.sort((a, b) => b.timestamp - a.timestamp);
+    
     return logs;
   } catch (e) {
     console.error("Error fetching logs manually:", e);
@@ -149,6 +159,16 @@ export const addNewManager = async (name: string, departmentName: string, passwo
   const newId = `mgr-${Date.now()}`;
   const newManager: Manager = { id: newId, name, departmentName, password };
   await setDoc(doc(db, 'managers', newId), newManager);
+};
+
+export const updateManager = async (manager: Manager): Promise<void> => {
+  if (!db) return;
+  try {
+    const docRef = doc(db, 'managers', manager.id);
+    await setDoc(docRef, manager, { merge: true });
+  } catch (e) {
+    console.error("Error updating manager:", e);
+  }
 };
 
 export const deleteManager = async (id: string): Promise<void> => {
@@ -276,17 +296,9 @@ export const deleteLocation = async (id: string) => {
   await deleteDoc(doc(db, 'locations', id));
 }
 
-// Seed data is now simpler or manager specific - keeping basic seed for backward compatibility if needed, 
-// but for multi-tenant, we usually start empty or use specific initialization.
-// We will skip auto-seeding hardcoded locations for new managers to let them customize.
+export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {};
 
-export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {
-   // Legacy support only
-};
-
-export const seedLocationsIfEmpty = async (defaultLocations: Location[]) => {
-   // Legacy support only
-};
+export const seedLocationsIfEmpty = async (defaultLocations: Location[]) => {};
 
 export const clearAllLogs = async (managerId?: string) => {
   if (!db) return;

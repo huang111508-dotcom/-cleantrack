@@ -23,6 +23,7 @@ import {
   clearAllLogs,
   fetchLogs,
   addNewManager, 
+  updateManager,
   deleteManager 
 } from './services/firebase';
 import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Building2 } from 'lucide-react';
@@ -130,6 +131,10 @@ const App: React.FC = () => {
     await addNewManager(name, dept, pass);
   };
   
+  const handleUpdateManager = async (manager: Manager) => {
+    await updateManager(manager);
+  };
+
   const handleDeleteManager = async (id: string) => {
     if(confirm(language === 'zh' ? '确定删除该部门及其管理员吗？' : 'Delete this department?')) {
       await deleteManager(id);
@@ -343,6 +348,7 @@ const App: React.FC = () => {
                <MasterDashboard 
                   managers={managersList}
                   onAddManager={handleAddManager}
+                  onUpdateManager={handleUpdateManager}
                   onDeleteManager={handleDeleteManager}
                   language={language}
                />
