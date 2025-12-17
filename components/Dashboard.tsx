@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Location, CleaningLog, Cleaner, Language } from '../types';
 import { analyzeCleaningData } from '../services/geminiService';
@@ -25,7 +26,9 @@ import {
   ChevronUp,
   History,
   MapPin,
-  Building2
+  Building2,
+  ClipboardCheck,
+  Zap
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -41,7 +44,7 @@ interface DashboardProps {
   onDeleteLocation: (id: string) => void;
   onRefresh: () => void;
   isCloudMode: boolean;
-  departmentName?: string; // New prop
+  departmentName?: string; 
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -135,9 +138,11 @@ const Dashboard: React.FC<DashboardProps> = ({
     };
   });
 
+  // Summary Metrics
   const totalTarget = locationStats.reduce((acc, curr) => acc + curr.periodTarget, 0);
   const totalCleaned = filteredLogs.length;
   const overallProgress = totalTarget > 0 ? Math.round((totalCleaned / totalTarget) * 100) : 0;
+  const locationsBehindCount = locationStats.filter(l => l.isAtRisk && l.periodTarget > 0).length;
 
   const handleRunAnalysis = async () => {
     setIsAnalyzing(true);
@@ -234,17 +239,11 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Helper for expanded log view
   const renderLogDetails = (loc: any) => (
     <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 animate-fade-in relative">
-       {/* Delete Location Button - Only in expanded view */}
-       <button 
-          onClick={(e) => { e.stopPropagation(); onDeleteLocation(loc.id); }}
-          className="absolute right-4 top-3 text-red-400 hover:text-red-600 flex items-center gap-1 text-xs px-2 py-1 hover:bg-red-50 rounded"
-       >
-         <Trash2 size={12} /> {language === 'zh' ? '删除点位' : 'Delete Location'}
-       </button>
-
-       <div className="flex items-center gap-2 mb-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
-          <History size={14} />
-          {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
+       <div className="flex justify-between items-center mb-4">
+           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <History size={14} />
+              {language === 'zh' ? '打卡记录明细' : 'Cleaning History Log'}
+           </div>
        </div>
        
        {loc.logs.length > 0 ? (
@@ -369,6 +368,68 @@ const Dashboard: React.FC<DashboardProps> = ({
          </div>
       </div>
 
+      {/* --- NEW: Stats Overview Grid --- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Card: Total Target */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 transition-transform hover:scale-[1.02]">
+           <div className="p-3 bg-brand-50 text-brand-600 rounded-xl">
+             <Target size={24} />
+           </div>
+           <div>
+             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{language === 'zh' ? '目标打卡数' : 'Total Target'}</p>
+             <h3 className="text-2xl font-bold text-slate-800 mt-1">{totalTarget}</h3>
+             <p className="text-[10px] text-slate-400 mt-0.5">{daysDiff} {t.days} total</p>
+           </div>
+        </div>
+
+        {/* Card: Completed Tasks */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 transition-transform hover:scale-[1.02]">
+           <div className="p-3 bg-green-50 text-green-600 rounded-xl">
+             <ClipboardCheck size={24} />
+           </div>
+           <div>
+             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{language === 'zh' ? '已完成打卡' : 'Completed'}</p>
+             <h3 className="text-2xl font-bold text-slate-800 mt-1">{totalCleaned}</h3>
+             <p className="text-[10px] text-green-600 mt-0.5 font-bold flex items-center gap-1">
+               <Zap size={10} /> {language === 'zh' ? '实时更新中' : 'Live Data'}
+             </p>
+           </div>
+        </div>
+
+        {/* Card: Compliance Rate */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 transition-transform hover:scale-[1.02]">
+           <div className={`p-3 rounded-xl ${overallProgress >= 90 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-600'}`}>
+             <BarChart3 size={24} />
+           </div>
+           <div>
+             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.dailyCompliance}</p>
+             <h3 className={`text-2xl font-bold mt-1 ${overallProgress < 70 ? 'text-red-500' : 'text-slate-800'}`}>
+               {overallProgress}%
+             </h3>
+             <div className="w-20 bg-slate-100 h-1 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className={`h-full ${overallProgress < 70 ? 'bg-red-500' : 'bg-brand-500'}`} 
+                  style={{ width: `${Math.min(overallProgress, 100)}%` }}
+                />
+             </div>
+           </div>
+        </div>
+
+        {/* Card: Issues/Behind */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4 transition-transform hover:scale-[1.02]">
+           <div className={`p-3 rounded-xl ${locationsBehindCount > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+             <AlertTriangle size={24} />
+           </div>
+           <div>
+             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.activeIssues}</p>
+             <h3 className={`text-2xl font-bold mt-1 ${locationsBehindCount > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+               {locationsBehindCount}
+             </h3>
+             <p className="text-[10px] text-slate-400 mt-0.5">{language === 'zh' ? '个点位落后' : 'locs at risk'}</p>
+           </div>
+        </div>
+      </div>
+
       {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -453,7 +514,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       <th className="px-6 py-4">{t.status}</th>
                       <th className="px-6 py-4">{t.progress}</th>
                       <th className="px-6 py-4">{t.lastCleaned}</th>
-                      <th className="w-8 px-2"></th>
+                      <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -526,8 +587,20 @@ const Dashboard: React.FC<DashboardProps> = ({
                               <span className="text-slate-400 italic">--</span>
                             )}
                           </td>
-                          <td className="px-2">
-                             {expandedLocationId === loc.id ? <ChevronUp size={16} className="text-brand-500" /> : <ChevronDown size={16} className="text-slate-300 group-hover:text-slate-500" />}
+                          <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteLocation(loc.id);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors z-10"
+                              title={language === 'zh' ? '删除' : 'Delete'}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                            <div className="p-2 text-slate-300 group-hover:text-slate-500">
+                              {expandedLocationId === loc.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </div>
                           </td>
                         </tr>
                         
@@ -571,8 +644,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                               {loc.zone}
                             </span>
                         </div>
-                        <div className="shrink-0">
+                        <div className="shrink-0 flex items-center gap-2">
                             {renderStatusBadge(loc)}
+                            <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteLocation(loc.id);
+                                }}
+                                className="p-2 bg-white text-slate-400 border border-slate-200 rounded-lg hover:text-red-500 hover:border-red-200 shadow-sm z-10"
+                            >
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                       </div>
 
