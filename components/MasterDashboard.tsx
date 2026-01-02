@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Manager, Language, CleaningLog, Cleaner, Location } from '../types';
+import { Manager, Language, CleaningLog, Cleaner, Location, DeletionRequest } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { getLegacyDataStats, migrateLegacyData } from '../services/firebase';
 import Dashboard from './Dashboard';
@@ -17,6 +17,10 @@ interface MasterDashboardProps {
   selectedManagerId: string | null;
   onSelectManager: (id: string | null) => void;
   
+  // New props for Request Handling
+  deletionRequests: DeletionRequest[];
+  onResolveRequest: (req: DeletionRequest, approve: boolean) => void;
+
   // Dashboard Props (passed through)
   locations: Location[];
   logs: CleaningLog[];
@@ -29,6 +33,9 @@ interface MasterDashboardProps {
   onDeleteLocation: (id: string) => void;
   onRefresh: () => void;
   isCloudMode: boolean;
+  isLoading?: boolean; 
+  onLoadHistory?: () => void; // NEW
+  hasLoadedHistory?: boolean; // NEW
 }
 
 const MasterDashboard: React.FC<MasterDashboardProps> = ({ 
@@ -39,6 +46,11 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
   language,
   selectedManagerId,
   onSelectManager,
+  deletionRequests,
+  onResolveRequest,
+  isLoading,
+  onLoadHistory,
+  hasLoadedHistory,
   ...dashboardProps // Pass remaining props to Dashboard
 }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -120,6 +132,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
   };
 
   const hasLegacyData = legacyStats.locations > 0 || legacyStats.cleaners > 0 || legacyStats.logs > 0;
+  
+  // Filter pending requests
+  const pendingRequests = deletionRequests.filter(r => r.status === 'pending');
 
   // --- VIEW MODE: DETAILED DEPARTMENT DASHBOARD ---
   if (selectedManagerId) {
@@ -141,6 +156,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
           {...dashboardProps}
           departmentName={selectedManager?.departmentName || 'Unknown Department'}
           language={language}
+          isLoading={isLoading}
+          onLoadHistory={onLoadHistory}
+          hasLoadedHistory={hasLoadedHistory}
         />
       </div>
     );
@@ -150,6 +168,53 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({
   return (
     <div className="max-w-5xl mx-auto p-4 animate-fade-in pb-20">
       
+      {/* PENDING REQUESTS ALERT */}
+      {pendingRequests.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg border border-red-200 overflow-hidden mb-8">
+           <div className="bg-red-50 p-4 border-b border-red-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-red-800 flex items-center gap-2">
+                 <AlertCircle size={20} />
+                 {language === 'zh' ? '待处理删除申请' : 'Pending Deletion Requests'}
+              </h3>
+              <span className="bg-red-200 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
+                {pendingRequests.length}
+              </span>
+           </div>
+           <div className="divide-y divide-red-50">
+             {pendingRequests.map(req => (
+               <div key={req.id} className="p-4 flex items-center justify-between hover:bg-red-50/50 transition-colors">
+                  <div>
+                     <p className="font-bold text-slate-800">{req.locationName}</p>
+                     <p className="text-xs text-slate-500 mt-1">
+                        <span className="font-medium text-slate-700">{req.departmentName}</span> 
+                        <span className="mx-1">•</span> 
+                        Requested by {req.managerName}
+                        <span className="mx-1">•</span> 
+                        {new Date(req.timestamp).toLocaleString()}
+                     </p>
+                  </div>
+                  <div className="flex gap-2">
+                     <button 
+                       onClick={() => onResolveRequest(req, false)}
+                       className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold flex items-center gap-1"
+                     >
+                        <X size={14} />
+                        {language === 'zh' ? '拒绝' : 'Reject'}
+                     </button>
+                     <button 
+                       onClick={() => onResolveRequest(req, true)}
+                       className="p-2 bg-red-600 text-white hover:bg-red-700 rounded-lg shadow-sm text-xs font-bold flex items-center gap-1"
+                     >
+                        <Trash2 size={14} />
+                        {language === 'zh' ? '批准删除' : 'Approve Delete'}
+                     </button>
+                  </div>
+               </div>
+             ))}
+           </div>
+        </div>
+      )}
+
       {/* 1. Header */}
       <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden mb-8">
         <div className="p-6 bg-slate-900 text-white flex justify-between items-center">

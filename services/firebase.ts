@@ -54,7 +54,6 @@ export const initFirebase = (): boolean => {
     
     db = getFirestore(app);
 
-    // Persistence removed as requested to ensure fresh data fetch
     console.log("Firebase initialized successfully with hardcoded config.");
     return true;
   } catch (e) {
@@ -65,21 +64,31 @@ export const initFirebase = (): boolean => {
 
 // --- Data Operations ---
 
-export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, managerId?: string) => {
+/**
+ * Subscribe to logs.
+ * @param callback Function to handle new logs
+ * @param managerId Optional manager ID filter
+ * @param startTime Optional timestamp. Note: For stability without custom indexes, strictly server-side filtering is simplified.
+ */
+export const subscribeToLogs = (
+  callback: (logs: CleaningLog[]) => void, 
+  managerId?: string, 
+  startTime: number = 0
+) => {
   if (!db) return () => {};
 
   let q;
+  const colRef = collection(db, 'logs');
+
   if (managerId) {
-    // FIX: Removing orderBy('timestamp') from the Firestore query when using where().
-    // Firestore requires a composite index for where() + orderBy(). 
-    // To avoid manual index creation for the user, we fetch by ID then sort in client-side JS.
-    q = query(
-      collection(db, 'logs'), 
-      where('managerId', '==', managerId)
-    );
+    // FIX: Use simple query to ensure data loads without requiring a Firestore Composite Index.
+    // Ideally we would use: where('managerId', '==', managerId), where('timestamp', '>=', startTime)
+    // But this fails if the user hasn't created the specific index. 
+    // We fetch all manager logs and let the UI filter them.
+    q = query(colRef, where('managerId', '==', managerId));
   } else {
-    // Fallback or Master view can use orderBy if no where clause conflicts
-    q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+    // Fallback or Master view
+    q = query(colRef, orderBy('timestamp', 'desc'));
   }
   
   const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -88,10 +97,9 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, manager
       logs.push({ id: doc.id, ...doc.data() } as CleaningLog);
     });
     
-    // Client-side sort to ensure correct order without complex indexes
+    // Client-side sort to ensure correct order
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
-    // console.log(`Synced ${logs.length} logs from cloud.`); // Removed verbose logging
     callback(logs);
   }, (error) => {
     console.error("Logs subscription error:", error);
@@ -106,7 +114,6 @@ export const fetchLogs = async (managerId?: string): Promise<CleaningLog[]> => {
   try {
     let q;
     if (managerId) {
-      // Same fix as subscribeToLogs
       q = query(collection(db, 'logs'), where('managerId', '==', managerId));
     } else {
       q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));

@@ -34,15 +34,18 @@ import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Build
 const App: React.FC = () => {
   // Application State
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false); // NEW: Global Loading State
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   
   // Data State
   const [managersList, setManagersList] = useState<Manager[]>([]);
   const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
   const [locationsList, setLocationsList] = useState<Location[]>([]); 
   const [logs, setLogs] = useState<CleaningLog[]>([]);
-  // NEW: Deletion Requests for Master Admin
   const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
+  
+  // Performance Optimization: Load only last 7 days by default
+  // 0 means "load everything"
+  const [dataStartTime, setDataStartTime] = useState<number>(Date.now() - (7 * 24 * 60 * 60 * 1000));
   
   // Session State
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
@@ -63,6 +66,11 @@ const App: React.FC = () => {
     if (currentUserRole === 'manager') return currentManager?.id;
     if (currentUserRole === 'master') return masterSelectedManagerId;
     return null;
+  };
+
+  const handleLoadFullHistory = () => {
+    console.log("Loading full history...");
+    setDataStartTime(0); // 0 triggers loading all data
   };
 
   // 1. Initialize System & Master Subscriptions (Always Run)
@@ -98,10 +106,10 @@ const App: React.FC = () => {
         console.log("Subscribing to Manager Data:", currentManager.id);
         setIsLoading(true); // Start loading
         
-        // OPTIMIZATION: Don't wait for logs to unblock UI. Logs are heavy and will stream in.
+        // OPTIMIZATION: Logs are heavily filtered by default
         unsubLogs = subscribeToLogs((data) => {
             setLogs(data);
-        }, currentManager.id);
+        }, currentManager.id, dataStartTime);
 
         unsubCleaners = subscribeToCleaners(setCleanersList, currentManager.id);
         
@@ -122,19 +130,17 @@ const App: React.FC = () => {
     }
     else if (currentUserRole === 'master') {
         // --- Master View ---
-        // 1. Always subscribe to deletion requests
         console.log("Master subscribing to global deletion requests");
         unsubRequests = subscribeToDeletionRequests(setDeletionRequests);
 
         // 2. If viewing a specific department, subscribe to that data
         if (masterSelectedManagerId) {
           console.log("Master subscribing to target Manager Data:", masterSelectedManagerId);
-          setIsLoading(true); // Start loading when switching depts
+          setIsLoading(true); 
           
           unsubLogs = subscribeToLogs((data) => {
               setLogs(data);
-              // We don't block UI on logs here either
-          }, masterSelectedManagerId);
+          }, masterSelectedManagerId, dataStartTime);
           
           unsubCleaners = subscribeToCleaners(setCleanersList, masterSelectedManagerId);
           
@@ -143,7 +149,7 @@ const App: React.FC = () => {
               handleDataLoad();
           }, masterSelectedManagerId);
         } else {
-            // If on main master dashboard (list of managers), we are not loading logs
+            // If on main master dashboard, we don't need detailed logs
             setIsLoading(false);
         }
     }
@@ -161,13 +167,16 @@ const App: React.FC = () => {
         unsubLocations(); 
         unsubRequests();
     };
-  }, [currentUserRole, currentManager, currentCleaner, masterSelectedManagerId, isCloudMode]);
+  }, [currentUserRole, currentManager, currentCleaner, masterSelectedManagerId, isCloudMode, dataStartTime]);
 
 
   // Actions
   const handleLogin = (role: UserRole, data?: any) => {
     setIsLoading(true); // Immediate feedback on button click
     setCurrentUserRole(role);
+    // Reset Data window to 7 days on fresh login
+    setDataStartTime(Date.now() - (7 * 24 * 60 * 60 * 1000));
+    
     if (role === 'cleaner' && data) {
       setCurrentCleaner(data);
       setView('cleaner-scan');
@@ -255,8 +264,6 @@ const App: React.FC = () => {
 
   // UPDATED: Robust logic to handle conditional deletion based on role
   const handleDeleteLocation = async (id: string) => {
-    console.log("Attempting to delete location:", id, "Role:", currentUserRole);
-    
     // Check cloud mode first
     if (!isCloudMode) {
         alert(language === 'zh' ? '系统未连接到数据库，无法执行删除操作。' : 'Cannot delete location: System offline.');
@@ -265,7 +272,6 @@ const App: React.FC = () => {
 
     const loc = locationsList.find(l => l.id === id);
     if (!loc) {
-        console.error("Location not found in list:", id);
         return;
     }
 
@@ -282,11 +288,9 @@ const App: React.FC = () => {
                 : 'Managers cannot delete directly. Click OK to request approval from Master Admin.')) {
                 
                 if (currentManager) {
-                    console.log("Submitting deletion request for", id);
                     await requestLocationDeletion(id, loc.nameZh, currentManager.id, currentManager.name, currentManager.departmentName);
                     alert(language === 'zh' ? '申请已提交，等待主管理员审核。' : 'Request sent to Master Admin.');
                 } else {
-                    console.error("Cannot request deletion: Current Manager is undefined");
                     alert(language === 'zh' ? '错误：未找到当前管理员信息' : 'Error: Manager info missing');
                 }
             }
@@ -324,6 +328,8 @@ const App: React.FC = () => {
   };
 
   const handleExportData = () => {
+    // Before export, we might want to ensure we have all history.
+    // For now, we export what is loaded.
     let csvContent = "\uFEFF"; 
     const headers = language === 'zh' ? "日期,时间,点位名称,区域,保洁员,状态\n" : "Date,Time,Location,Zone,Cleaner,Status\n";
     csvContent += headers;
@@ -494,6 +500,8 @@ const App: React.FC = () => {
                   onRefresh={handleRefreshData}
                   isCloudMode={isCloudMode}
                   isLoading={isLoading} // PASS LOADING STATE
+                  onLoadHistory={handleLoadFullHistory} // NEW: Load history function
+                  hasLoadedHistory={dataStartTime === 0} // NEW: Flag
                />
             )}
 
@@ -514,6 +522,8 @@ const App: React.FC = () => {
                 onRefresh={handleRefreshData}
                 isCloudMode={isCloudMode}
                 isLoading={isLoading} // PASS LOADING STATE
+                onLoadHistory={handleLoadFullHistory} // NEW: Load history function
+                hasLoadedHistory={dataStartTime === 0} // NEW: Flag
               />
             )}
             

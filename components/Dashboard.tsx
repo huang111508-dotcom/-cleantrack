@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Location, CleaningLog, Cleaner, Language } from '../types';
 import { analyzeCleaningData } from '../services/geminiService';
 import { TRANSLATIONS } from '../constants';
@@ -28,7 +28,8 @@ import {
   MapPin,
   Building2,
   ClipboardCheck,
-  Zap
+  Zap,
+  CloudLightning
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -44,8 +45,38 @@ interface DashboardProps {
   onDeleteLocation: (id: string) => void;
   onRefresh: () => void;
   isCloudMode: boolean;
-  departmentName?: string; 
+  departmentName?: string;
+  isLoading?: boolean; 
+  onLoadHistory?: () => void; // NEW
+  hasLoadedHistory?: boolean; // NEW
 }
+
+const DashboardSkeleton = () => (
+  <div className="space-y-6 animate-pulse">
+    {/* Header Skeleton */}
+    <div className="h-20 bg-slate-200 rounded-2xl w-full mb-6"></div>
+    {/* Stats Grid Skeleton */}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+       <div className="h-24 bg-slate-200 rounded-2xl"></div>
+       <div className="h-24 bg-slate-200 rounded-2xl"></div>
+       <div className="h-24 bg-slate-200 rounded-2xl"></div>
+       <div className="h-24 bg-slate-200 rounded-2xl"></div>
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+       <div className="lg:col-span-2 space-y-4">
+          <div className="h-16 bg-slate-200 rounded-xl"></div>
+          <div className="h-12 bg-slate-200 rounded-xl"></div>
+          <div className="h-12 bg-slate-200 rounded-xl"></div>
+          <div className="h-12 bg-slate-200 rounded-xl"></div>
+          <div className="h-12 bg-slate-200 rounded-xl"></div>
+       </div>
+       <div className="space-y-4">
+          <div className="h-64 bg-slate-200 rounded-xl"></div>
+          <div className="h-40 bg-slate-200 rounded-xl"></div>
+       </div>
+    </div>
+  </div>
+);
 
 const Dashboard: React.FC<DashboardProps> = ({ 
   locations, 
@@ -60,11 +91,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   onDeleteLocation,
   onRefresh,
   isCloudMode,
-  departmentName
+  departmentName,
+  isLoading = false,
+  onLoadHistory,
+  hasLoadedHistory = false
 }) => {
   const t = TRANSLATIONS[language];
   
   // -- Date Filter State --
+  // Returns 'YYYY-MM-DD' in local time
   const getTodayStr = () => {
     const d = new Date();
     const offset = d.getTimezoneOffset() * 60000;
@@ -73,6 +108,23 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const [startDate, setStartDate] = useState<string>(getTodayStr());
   const [endDate, setEndDate] = useState<string>(getTodayStr());
+
+  // -- Load History Logic --
+  useEffect(() => {
+    if (!hasLoadedHistory && onLoadHistory) {
+        // Construct date strictly from string components to avoid UTC shifts
+        const [y, m, d] = startDate.split('-').map(Number);
+        const startTs = new Date(y, m - 1, d, 0, 0, 0).getTime();
+        
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        
+        if (startTs < sevenDaysAgo) {
+            console.log("Auto-loading older history for date:", startDate);
+            onLoadHistory();
+        }
+    }
+  }, [startDate, hasLoadedHistory, onLoadHistory]);
+
 
   // -- Existing State --
   const [analysis, setAnalysis] = useState<string>('');
@@ -103,8 +155,19 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [newLocTarget, setNewLocTarget] = useState('20');
 
   // -- Date Logic Calculations --
-  const startTs = new Date(startDate).setHours(0, 0, 0, 0);
-  const endTs = new Date(endDate).setHours(23, 59, 59, 999);
+  // Robustly parse the date strings to local time timestamps
+  const getStartTs = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+  };
+
+  const getEndTs = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+  };
+
+  const startTs = getStartTs(startDate);
+  const endTs = getEndTs(endDate);
   
   const oneDay = 1000 * 60 * 60 * 24;
   const daysDiff = Math.max(1, Math.round((endTs - startTs) / oneDay));
@@ -294,6 +357,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     </div>
   );
 
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       
@@ -358,6 +425,8 @@ const Dashboard: React.FC<DashboardProps> = ({
          </div>
 
          <div className="flex items-center gap-2 justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-50 mt-2 md:mt-0 w-full md:w-auto">
+            {/* REMOVED: Load All History Button */}
+            
             <button 
               onClick={onRefresh}
               className="w-full md:w-auto flex items-center justify-center gap-1 text-sm text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-lg font-medium transition-colors"

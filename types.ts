@@ -1,4 +1,5 @@
 
+
 export type Language = 'en' | 'zh';
 
 export type UserRole = 'master' | 'manager' | 'cleaner' | null;
@@ -55,4 +56,15 @@ export interface FirebaseConfig {
   messagingSenderId: string;
   appId: string;
   measurementId?: string;
+}
+
+export interface DeletionRequest {
+  id: string;
+  locationId: string;
+  locationName: string;
+  managerId: string;
+  managerName: string;
+  departmentName: string;
+  timestamp: number;
+  status: 'pending' | 'approved' | 'rejected';
 }
