@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole, Manager } from './types';
+import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole, Manager, DeletionRequest } from './types';
 import { LOCATIONS, CLEANERS, TRANSLATIONS } from './constants';
 import Dashboard from './components/Dashboard';
 import MasterDashboard from './components/MasterDashboard';
@@ -24,19 +24,25 @@ import {
   fetchLogs,
   addNewManager, 
   updateManager,
-  deleteManager 
+  deleteManager,
+  requestLocationDeletion, 
+  subscribeToDeletionRequests, 
+  resolveDeletionRequest 
 } from './services/firebase';
 import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Building2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // Application State
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false); // NEW: Global Loading State
   
   // Data State
   const [managersList, setManagersList] = useState<Manager[]>([]);
   const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
   const [locationsList, setLocationsList] = useState<Location[]>([]); 
   const [logs, setLogs] = useState<CleaningLog[]>([]);
+  // NEW: Deletion Requests for Master Admin
+  const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
   
   // Session State
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
@@ -79,25 +85,67 @@ const App: React.FC = () => {
     let unsubLogs = () => {};
     let unsubCleaners = () => {};
     let unsubLocations = () => {};
+    let unsubRequests = () => {}; 
+
+    // Helper to turn off loading when data arrives
+    const handleDataLoad = () => {
+        // We use a small timeout to ensure the UI feels responsive but doesn't flicker
+        setTimeout(() => setIsLoading(false), 300); 
+    };
 
     if (currentUserRole === 'manager' && currentManager) {
         // --- Manager View: Scoped to their ID ---
         console.log("Subscribing to Manager Data:", currentManager.id);
-        unsubLogs = subscribeToLogs(setLogs, currentManager.id);
+        setIsLoading(true); // Start loading
+        
+        // OPTIMIZATION: Don't wait for logs to unblock UI. Logs are heavy and will stream in.
+        unsubLogs = subscribeToLogs((data) => {
+            setLogs(data);
+        }, currentManager.id);
+
         unsubCleaners = subscribeToCleaners(setCleanersList, currentManager.id);
-        unsubLocations = subscribeToLocations(setLocationsList, currentManager.id);
+        
+        // OPTIMIZATION: Unblock UI as soon as Locations (structure) are ready
+        unsubLocations = subscribeToLocations((data) => {
+            setLocationsList(data);
+            handleDataLoad(); 
+        }, currentManager.id);
     } 
     else if (currentUserRole === 'cleaner' && currentCleaner) {
         // --- Cleaner View: Scoped to their Manager ID ---
         console.log("Subscribing to Cleaner Data for Manager:", currentCleaner.managerId);
-        unsubLocations = subscribeToLocations(setLocationsList, currentCleaner.managerId);
+        setIsLoading(true);
+        unsubLocations = subscribeToLocations((data) => {
+            setLocationsList(data);
+            handleDataLoad();
+        }, currentCleaner.managerId);
     }
-    else if (currentUserRole === 'master' && masterSelectedManagerId) {
-        // --- Master View: Scoped to SELECTED Manager ID ---
-        console.log("Master subscribing to target Manager Data:", masterSelectedManagerId);
-        unsubLogs = subscribeToLogs(setLogs, masterSelectedManagerId);
-        unsubCleaners = subscribeToCleaners(setCleanersList, masterSelectedManagerId);
-        unsubLocations = subscribeToLocations(setLocationsList, masterSelectedManagerId);
+    else if (currentUserRole === 'master') {
+        // --- Master View ---
+        // 1. Always subscribe to deletion requests
+        console.log("Master subscribing to global deletion requests");
+        unsubRequests = subscribeToDeletionRequests(setDeletionRequests);
+
+        // 2. If viewing a specific department, subscribe to that data
+        if (masterSelectedManagerId) {
+          console.log("Master subscribing to target Manager Data:", masterSelectedManagerId);
+          setIsLoading(true); // Start loading when switching depts
+          
+          unsubLogs = subscribeToLogs((data) => {
+              setLogs(data);
+              // We don't block UI on logs here either
+          }, masterSelectedManagerId);
+          
+          unsubCleaners = subscribeToCleaners(setCleanersList, masterSelectedManagerId);
+          
+          unsubLocations = subscribeToLocations((data) => {
+              setLocationsList(data);
+              handleDataLoad();
+          }, masterSelectedManagerId);
+        } else {
+            // If on main master dashboard (list of managers), we are not loading logs
+            setIsLoading(false);
+        }
     }
     else if (!currentUserRole) {
         // --- Logged Out View (Login Screen) ---
@@ -111,12 +159,14 @@ const App: React.FC = () => {
         unsubLogs(); 
         unsubCleaners(); 
         unsubLocations(); 
+        unsubRequests();
     };
   }, [currentUserRole, currentManager, currentCleaner, masterSelectedManagerId, isCloudMode]);
 
 
   // Actions
   const handleLogin = (role: UserRole, data?: any) => {
+    setIsLoading(true); // Immediate feedback on button click
     setCurrentUserRole(role);
     if (role === 'cleaner' && data) {
       setCurrentCleaner(data);
@@ -140,6 +190,8 @@ const App: React.FC = () => {
     setLogs([]);
     setCleanersList([]);
     setLocationsList([]);
+    setDeletionRequests([]);
+    setIsLoading(false);
   };
 
   // --- MASTER ACTIONS ---
@@ -158,6 +210,17 @@ const App: React.FC = () => {
         setMasterSelectedManagerId(null);
       }
     }
+  };
+
+  const handleResolveDeletionRequest = async (req: DeletionRequest, approve: boolean) => {
+     try {
+        await resolveDeletionRequest(req, approve);
+        // Optimistically remove from local state to feel faster, though subscription will sync it
+        setDeletionRequests(prev => prev.filter(r => r.id !== req.id));
+     } catch (e) {
+        console.error("Failed to resolve request:", e);
+        alert(language === 'zh' ? '处理请求失败' : 'Failed to resolve request');
+     }
   };
 
   // --- DATA ACTIONS (Shared between Manager and Master) ---
@@ -190,9 +253,49 @@ const App: React.FC = () => {
     }
   }
 
+  // UPDATED: Robust logic to handle conditional deletion based on role
   const handleDeleteLocation = async (id: string) => {
-    if(confirm(language === 'zh' ? '确定要删除该点位吗？' : 'Delete this location?')) {
-        await deleteLocation(id);
+    console.log("Attempting to delete location:", id, "Role:", currentUserRole);
+    
+    // Check cloud mode first
+    if (!isCloudMode) {
+        alert(language === 'zh' ? '系统未连接到数据库，无法执行删除操作。' : 'Cannot delete location: System offline.');
+        return;
+    }
+
+    const loc = locationsList.find(l => l.id === id);
+    if (!loc) {
+        console.error("Location not found in list:", id);
+        return;
+    }
+
+    try {
+        if (currentUserRole === 'master') {
+            // Master can delete directly
+            if(confirm(language === 'zh' ? '确定要永久删除该点位吗？' : 'Permanently delete this location?')) {
+                await deleteLocation(id);
+            }
+        } else {
+            // Manager must request deletion
+            if(confirm(language === 'zh' 
+                ? '子管理员无法直接删除点位。点击“确定”将向主管理员提交删除申请。' 
+                : 'Managers cannot delete directly. Click OK to request approval from Master Admin.')) {
+                
+                if (currentManager) {
+                    console.log("Submitting deletion request for", id);
+                    await requestLocationDeletion(id, loc.nameZh, currentManager.id, currentManager.name, currentManager.departmentName);
+                    alert(language === 'zh' ? '申请已提交，等待主管理员审核。' : 'Request sent to Master Admin.');
+                } else {
+                    console.error("Cannot request deletion: Current Manager is undefined");
+                    alert(language === 'zh' ? '错误：未找到当前管理员信息' : 'Error: Manager info missing');
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Delete operation failed:", error);
+        alert(language === 'zh' 
+            ? '操作失败。请检查网络连接或权限设置。' 
+            : 'Operation failed. Please check network or permissions.');
     }
   }
 
@@ -373,6 +476,9 @@ const App: React.FC = () => {
                   onUpdateManager={handleUpdateManager}
                   onDeleteManager={handleDeleteManager}
                   language={language}
+                  // New Props for Request Handling
+                  deletionRequests={deletionRequests}
+                  onResolveRequest={handleResolveDeletionRequest}
                   // Props for Dashboard view within Master
                   selectedManagerId={masterSelectedManagerId}
                   onSelectManager={setMasterSelectedManagerId}
@@ -387,6 +493,7 @@ const App: React.FC = () => {
                   onDeleteLocation={handleDeleteLocation}
                   onRefresh={handleRefreshData}
                   isCloudMode={isCloudMode}
+                  isLoading={isLoading} // PASS LOADING STATE
                />
             )}
 
@@ -406,6 +513,7 @@ const App: React.FC = () => {
                 language={language}
                 onRefresh={handleRefreshData}
                 isCloudMode={isCloudMode}
+                isLoading={isLoading} // PASS LOADING STATE
               />
             )}
             
