@@ -43,9 +43,9 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
   
-  // Performance Optimization: Load only last 7 days by default
+  // Performance Optimization: Load only last 3 days by default
   // 0 means "load everything"
-  const [dataStartTime, setDataStartTime] = useState<number>(Date.now() - (7 * 24 * 60 * 60 * 1000));
+  const [dataStartTime, setDataStartTime] = useState<number>(Date.now() - (3 * 24 * 60 * 60 * 1000));
   
   // Session State
   const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
@@ -174,8 +174,8 @@ const App: React.FC = () => {
   const handleLogin = (role: UserRole, data?: any) => {
     setIsLoading(true); // Immediate feedback on button click
     setCurrentUserRole(role);
-    // Reset Data window to 7 days on fresh login
-    setDataStartTime(Date.now() - (7 * 24 * 60 * 60 * 1000));
+    // Reset Data window to 3 days on fresh login
+    setDataStartTime(Date.now() - (3 * 24 * 60 * 60 * 1000));
     
     if (role === 'cleaner' && data) {
       setCurrentCleaner(data);
