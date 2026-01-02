@@ -116,9 +116,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         const [y, m, d] = startDate.split('-').map(Number);
         const startTs = new Date(y, m - 1, d, 0, 0, 0).getTime();
         
-        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        // Calculate 3 days ago (matching default in App.tsx)
+        const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000);
         
-        if (startTs < sevenDaysAgo) {
+        if (startTs < threeDaysAgo) {
             console.log("Auto-loading older history for date:", startDate);
             onLoadHistory();
         }
