@@ -16,7 +16,7 @@ import {
   where,
   DocumentReference
 } from 'firebase/firestore';
-import { CleaningLog, Cleaner, Location, Manager, FirebaseConfig } from '../types';
+import { CleaningLog, Cleaner, Location, Manager, FirebaseConfig, DeletionRequest } from '../types';
 
 // Hardcoded configuration provided by user
 const DEFAULT_CONFIG: FirebaseOptions = {
@@ -51,7 +51,10 @@ export const initFirebase = (): boolean => {
     } else {
       app = getApp();
     }
+    
     db = getFirestore(app);
+
+    // Persistence removed as requested to ensure fresh data fetch
     console.log("Firebase initialized successfully with hardcoded config.");
     return true;
   } catch (e) {
@@ -88,7 +91,7 @@ export const subscribeToLogs = (callback: (logs: CleaningLog[]) => void, manager
     // Client-side sort to ensure correct order without complex indexes
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
-    console.log(`Synced ${logs.length} logs from cloud.`);
+    // console.log(`Synced ${logs.length} logs from cloud.`); // Removed verbose logging
     callback(logs);
   }, (error) => {
     console.error("Logs subscription error:", error);
@@ -295,6 +298,56 @@ export const deleteLocation = async (id: string) => {
   if (!db) return;
   await deleteDoc(doc(db, 'locations', id));
 }
+
+// --- Deletion Requests Operations (NEW) ---
+
+export const requestLocationDeletion = async (locationId: string, locationName: string, managerId: string, managerName: string, departmentName: string) => {
+  if (!db) return;
+  const newId = `req-${Date.now()}`;
+  const request: DeletionRequest = {
+    id: newId,
+    locationId,
+    locationName,
+    managerId,
+    managerName,
+    departmentName,
+    timestamp: Date.now(),
+    status: 'pending'
+  };
+  await setDoc(doc(db, 'deletionRequests', newId), request);
+};
+
+export const subscribeToDeletionRequests = (callback: (requests: DeletionRequest[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'deletionRequests'));
+  return onSnapshot(q, (snapshot) => {
+    const requests: DeletionRequest[] = [];
+    snapshot.forEach((doc) => {
+      requests.push({ id: doc.id, ...doc.data() } as DeletionRequest);
+    });
+    // Sort by timestamp desc
+    requests.sort((a, b) => b.timestamp - a.timestamp);
+    callback(requests);
+  });
+};
+
+export const resolveDeletionRequest = async (request: DeletionRequest, approve: boolean) => {
+    if (!db) return;
+    
+    const batch = writeBatch(db);
+    
+    // 1. Update request status
+    const reqRef = doc(db, 'deletionRequests', request.id);
+    batch.update(reqRef, { status: approve ? 'approved' : 'rejected' });
+    
+    // 2. If approved, delete the location
+    if (approve) {
+        const locRef = doc(db, 'locations', request.locationId);
+        batch.delete(locRef);
+    }
+    
+    await batch.commit();
+};
 
 export const seedCleanersIfEmpty = async (defaultCleaners: Cleaner[]) => {};
 
