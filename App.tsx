@@ -1,552 +1,510 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { InputSection } from './components/InputSection';
+import { ReportTable } from './components/ReportTable';
+import { Dashboard } from './components/Dashboard';
+import { parseDingTalkLogs } from './services/geminiService';
+import { exportToExcel } from './utils/exportUtils';
+import { ReportItem, ParsingStatus } from './types';
+import { Download, LayoutDashboard, MessageSquareText, RefreshCw, Calendar as CalendarIcon, Filter, Cloud, CloudOff, AlertTriangle, X, History, Smartphone, Share } from 'lucide-react';
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, writeBatch, getDocs, where } from "firebase/firestore";
 
-import React, { useState, useEffect } from 'react';
-import { ViewState, CleaningLog, Cleaner, Location, Language, UserRole, Manager, DeletionRequest } from './types';
-import { LOCATIONS, CLEANERS, TRANSLATIONS } from './constants';
-import Dashboard from './components/Dashboard';
-import MasterDashboard from './components/MasterDashboard';
-import CleanerInterface from './components/CleanerInterface';
-import QRCodeGenerator from './components/QRCodeGenerator';
-import LoginScreen from './components/LoginScreen';
-import { 
-  initFirebase, 
-  subscribeToLogs, 
-  subscribeToCleaners, 
-  subscribeToLocations, 
-  subscribeToManagers, 
-  updateLocation, 
-  addNewLocation, 
-  deleteLocation, 
-  addCleaningLog, 
-  updateCleaner,
-  addNewCleaner, 
-  deleteCleaner, 
-  clearAllLogs,
-  fetchLogs,
-  addNewManager, 
-  updateManager,
-  deleteManager,
-  requestLocationDeletion, 
-  subscribeToDeletionRequests, 
-  resolveDeletionRequest 
-} from './services/firebase';
-import { LayoutDashboard, Globe, Printer, LogOut, Download, Trash2, Cloud, Building2 } from 'lucide-react';
+// ------------------------------------------------------------------
+// Firebase Configuration
+// ------------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB60RoAnYkY7GRbApw7cztr4t2mQTLbxj0",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "riyadh-dingtalk-feeback.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "riyadh-dingtalk-feeback",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "riyadh-dingtalk-feeback.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "568013950248",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:568013950248:web:83fb340f6589a0e7e0d41d",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
+};
+
+const isConfigured = 
+  firebaseConfig.apiKey && 
+  firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY" && 
+  firebaseConfig.apiKey !== "";
+
+let db: any = null;
+
+if (isConfigured) {
+  try {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+  } catch (e) {
+    console.error("Firebase init error:", e);
+  }
+}
+
+const getDateDaysAgo = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const LOCAL_STORAGE_KEY = 'dingtalk_reports_data';
 
 const App: React.FC = () => {
-  // Application State
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [status, setStatus] = useState<ParsingStatus>(ParsingStatus.IDLE);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showBanner, setShowBanner] = useState<boolean>(!isConfigured);
   
-  // Data State
-  const [managersList, setManagersList] = useState<Manager[]>([]);
-  const [cleanersList, setCleanersList] = useState<Cleaner[]>([]);
-  const [locationsList, setLocationsList] = useState<Location[]>([]); 
-  const [logs, setLogs] = useState<CleaningLog[]>([]);
-  const [deletionRequests, setDeletionRequests] = useState<DeletionRequest[]>([]);
-  
-  // Performance Optimization: Load only last 3 days by default
-  // 0 means "load everything"
-  const [dataStartTime, setDataStartTime] = useState<number>(Date.now() - (3 * 24 * 60 * 60 * 1000));
-  
-  // Session State
-  const [currentCleaner, setCurrentCleaner] = useState<Cleaner | undefined>(undefined);
-  const [currentManager, setCurrentManager] = useState<Manager | undefined>(undefined);
-  // NEW: State for Master Admin to track which department they are viewing
-  const [masterSelectedManagerId, setMasterSelectedManagerId] = useState<string | null>(null);
-  
-  const [view, setView] = useState<ViewState>('dashboard');
-  const [language, setLanguage] = useState<Language>('zh'); 
+  // Date Range Filtering State
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
-  // Cloud Mode State
-  const [isCloudMode, setIsCloudMode] = useState(true);
+  // Performance Optimization
+  const [isFullHistory, setIsFullHistory] = useState<boolean>(false);
 
-  const t = TRANSLATIONS[language];
+  // PWA Install State
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSHint, setShowIOSHint] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
-  // Helper to determine which manager ID to use for operations
-  const getActiveManagerId = () => {
-    if (currentUserRole === 'manager') return currentManager?.id;
-    if (currentUserRole === 'master') return masterSelectedManagerId;
-    return null;
-  };
-
-  const handleLoadFullHistory = () => {
-    console.log("Loading full history...");
-    setDataStartTime(0); // 0 triggers loading all data
-  };
-
-  // 1. Initialize System & Master Subscriptions (Always Run)
+  // PWA & iOS Detection
   useEffect(() => {
-    const cloudInit = initFirebase();
-    setIsCloudMode(cloudInit);
+    // Check if already installed/standalone
+    const checkStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    setIsStandalone(!!checkStandalone);
 
-    if (cloudInit) {
-      // Subscribe to Managers List (Always needed for Login selection)
-      const unsubManagers = subscribeToManagers((mgrs) => setManagersList(mgrs));
-      return () => { unsubManagers(); };
-    } 
+    // Detect iOS
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    setIsIOS(isIosDevice);
+
+    // Capture install prompt (Android/Desktop)
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // 2. Dynamic Data Subscriptions based on Role
-  useEffect(() => {
-    if (!isCloudMode) return;
-    
-    // cleanup previous subscriptions
-    let unsubLogs = () => {};
-    let unsubCleaners = () => {};
-    let unsubLocations = () => {};
-    let unsubRequests = () => {}; 
-
-    // Helper to turn off loading when data arrives
-    const handleDataLoad = () => {
-        // We use a small timeout to ensure the UI feels responsive but doesn't flicker
-        setTimeout(() => setIsLoading(false), 300); 
-    };
-
-    if (currentUserRole === 'manager' && currentManager) {
-        // --- Manager View: Scoped to their ID ---
-        console.log("Subscribing to Manager Data:", currentManager.id);
-        setIsLoading(true); // Start loading
-        
-        // OPTIMIZATION: Logs are heavily filtered by default
-        unsubLogs = subscribeToLogs((data) => {
-            setLogs(data);
-        }, currentManager.id, dataStartTime);
-
-        unsubCleaners = subscribeToCleaners(setCleanersList, currentManager.id);
-        
-        // OPTIMIZATION: Unblock UI as soon as Locations (structure) are ready
-        unsubLocations = subscribeToLocations((data) => {
-            setLocationsList(data);
-            handleDataLoad(); 
-        }, currentManager.id);
-    } 
-    else if (currentUserRole === 'cleaner' && currentCleaner) {
-        // --- Cleaner View: Scoped to their Manager ID ---
-        console.log("Subscribing to Cleaner Data for Manager:", currentCleaner.managerId);
-        setIsLoading(true);
-        unsubLocations = subscribeToLocations((data) => {
-            setLocationsList(data);
-            handleDataLoad();
-        }, currentCleaner.managerId);
-    }
-    else if (currentUserRole === 'master') {
-        // --- Master View ---
-        console.log("Master subscribing to global deletion requests");
-        unsubRequests = subscribeToDeletionRequests(setDeletionRequests);
-
-        // 2. If viewing a specific department, subscribe to that data
-        if (masterSelectedManagerId) {
-          console.log("Master subscribing to target Manager Data:", masterSelectedManagerId);
-          setIsLoading(true); 
-          
-          unsubLogs = subscribeToLogs((data) => {
-              setLogs(data);
-          }, masterSelectedManagerId, dataStartTime);
-          
-          unsubCleaners = subscribeToCleaners(setCleanersList, masterSelectedManagerId);
-          
-          unsubLocations = subscribeToLocations((data) => {
-              setLocationsList(data);
-              handleDataLoad();
-          }, masterSelectedManagerId);
-        } else {
-            // If on main master dashboard, we don't need detailed logs
-            setIsLoading(false);
+  const handleInstallClick = () => {
+    if (isIOS) {
+      setShowIOSHint(true);
+    } else if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          setInstallPrompt(null);
         }
+      });
     }
-    else if (!currentUserRole) {
-        // --- Logged Out View (Login Screen) ---
-        console.log("Subscribing to ALL Cleaners for Login Screen");
-        unsubCleaners = subscribeToCleaners((allCleaners) => {
-          setCleanersList(allCleaners);
-        });
+  };
+
+  useEffect(() => {
+    if (startDate && !isFullHistory) {
+      setIsFullHistory(true);
     }
+  }, [startDate, isFullHistory]);
 
-    return () => { 
-        unsubLogs(); 
-        unsubCleaners(); 
-        unsubLocations(); 
-        unsubRequests();
-    };
-  }, [currentUserRole, currentManager, currentCleaner, masterSelectedManagerId, isCloudMode, dataStartTime]);
+  // Cloud Sync
+  useEffect(() => {
+    if (!isConfigured || !db) return;
 
-
-  // Actions
-  const handleLogin = (role: UserRole, data?: any) => {
-    setIsLoading(true); // Immediate feedback on button click
-    setCurrentUserRole(role);
-    // Reset Data window to 3 days on fresh login
-    setDataStartTime(Date.now() - (3 * 24 * 60 * 60 * 1000));
+    let q;
+    if (isFullHistory) {
+      q = query(collection(db, "reports"), orderBy("date", "desc"));
+    } else {
+      const fourteenDaysAgo = getDateDaysAgo(14);
+      q = query(
+        collection(db, "reports"), 
+        where("date", ">=", fourteenDaysAgo),
+        orderBy("date", "desc")
+      );
+    }
     
-    if (role === 'cleaner' && data) {
-      setCurrentCleaner(data);
-      setView('cleaner-scan');
-    } else if (role === 'manager' && data) {
-      setCurrentManager(data);
-      setView('dashboard');
-    } else if (role === 'master') {
-      setView('master-dashboard');
-      setMasterSelectedManagerId(null); // Reset selection on login
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cloudReports = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as ReportItem[];
+      setReports(cloudReports);
+    }, (error) => {
+      console.error("Sync error:", error);
+      if (error.code === 'permission-denied') {
+        setErrorMsg("Cloud sync failed: Permission denied. Please check Firestore Rules.");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isFullHistory]);
+
+  // Local Sync
+  useEffect(() => {
+    if (isConfigured) return;
+    try {
+      const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        setReports(parsed);
+      }
+    } catch (e) {
+      console.error("Failed to load local data", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isConfigured) return;
+    if (reports.length > 0) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(reports));
+    }
+  }, [reports]);
+
+  const handleAnalyze = async (text: string) => {
+    setStatus(ParsingStatus.ANALYZING);
+    setErrorMsg(null);
+    try {
+      const newReports = await parseDingTalkLogs(text);
+      if (isConfigured && db) {
+        const uploadPromises = newReports.map(item => {
+          const { id, ...data } = item;
+          return addDoc(collection(db, "reports"), data);
+        });
+        await Promise.all(uploadPromises);
+      } else {
+        setReports(prev => {
+          const updated = [...newReports, ...prev];
+          return updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        });
+      }
+      setStatus(ParsingStatus.SUCCESS);
+    } catch (e) {
+      console.error(e);
+      setStatus(ParsingStatus.ERROR);
+      setErrorMsg("Failed to parse the text. Please check your AI API key or text format.");
     }
   };
 
-  const handleLogout = () => {
-    setCurrentUserRole(null);
-    setCurrentCleaner(undefined);
-    setCurrentManager(undefined);
-    setMasterSelectedManagerId(null);
-    setView('dashboard'); // reset view
-    // Clear data to prevent flashing old data on re-login
-    setLogs([]);
-    setCleanersList([]);
-    setLocationsList([]);
-    setDeletionRequests([]);
-    setIsLoading(false);
+  const handleDelete = async (id: string) => {
+    if (isConfigured && db) {
+      try {
+        await deleteDoc(doc(db, "reports", id));
+      } catch (e) {
+        console.error("Delete failed", e);
+        alert("Failed to delete from cloud. Check permissions.");
+      }
+    } else {
+      const newReports = reports.filter(r => r.id !== id);
+      setReports(newReports);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newReports));
+    }
   };
 
-  // --- MASTER ACTIONS ---
-  const handleAddManager = async (name: string, dept: string, pass: string) => {
-    await addNewManager(name, dept, pass);
-  };
-  
-  const handleUpdateManager = async (manager: Manager) => {
-    await updateManager(manager);
+  const displayedReports = useMemo(() => {
+    if (!startDate && !endDate) return reports;
+    return reports.filter(r => {
+      let isValid = true;
+      if (startDate && r.date < startDate) isValid = false;
+      if (endDate && r.date > endDate) isValid = false;
+      return isValid;
+    });
+  }, [reports, startDate, endDate]);
+
+  const isFiltered = !!(startDate || endDate);
+
+  const handleExport = () => {
+    let filename = 'DingTalk_Summary';
+    if (startDate && endDate) {
+      filename += `_${startDate}_to_${endDate}`;
+    } else if (startDate) {
+      filename += `_from_${startDate}`;
+    } else if (endDate) {
+      filename += `_until_${endDate}`;
+    } else {
+      filename += `_All_Time`;
+    }
+    exportToExcel(displayedReports, `${filename}.xlsx`);
   };
 
-  const handleDeleteManager = async (id: string) => {
-    if(confirm(language === 'zh' ? '确定删除该部门及其管理员吗？' : 'Delete this department?')) {
-      await deleteManager(id);
-      if (masterSelectedManagerId === id) {
-        setMasterSelectedManagerId(null);
+  const handleReset = async () => {
+    const confirmMsg = isConfigured 
+      ? "警告：这将永久删除云端数据库中的【所有】记录，且不可恢复！继续？" 
+      : "确定要清空本地所有数据吗？";
+
+    if (confirm(confirmMsg)) {
+      const password = prompt("请输入管理员密码以执行清空操作:");
+      if (password !== "admin888") {
+        if (password !== null) alert("密码错误，操作已取消。");
+        return;
+      }
+
+      if (isConfigured && db) {
+        try {
+          setStatus(ParsingStatus.ANALYZING);
+          const q = query(collection(db, "reports"));
+          const snapshot = await getDocs(q);
+          const batch = writeBatch(db);
+          snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+          setStatus(ParsingStatus.IDLE);
+        } catch (e) {
+          console.error("Batch delete failed", e);
+          alert("Failed to clear cloud data.");
+          setStatus(ParsingStatus.IDLE);
+        }
+      } else {
+        setReports([]);
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        setStatus(ParsingStatus.IDLE);
       }
     }
   };
 
-  const handleResolveDeletionRequest = async (req: DeletionRequest, approve: boolean) => {
-     try {
-        await resolveDeletionRequest(req, approve);
-        // Optimistically remove from local state to feel faster, though subscription will sync it
-        setDeletionRequests(prev => prev.filter(r => r.id !== req.id));
-     } catch (e) {
-        console.error("Failed to resolve request:", e);
-        alert(language === 'zh' ? '处理请求失败' : 'Failed to resolve request');
-     }
-  };
-
-  // --- DATA ACTIONS (Shared between Manager and Master) ---
-
-  const handleUpdateCleaner = async (updatedCleaner: Cleaner) => {
-    await updateCleaner(updatedCleaner);
-  };
-
-  const handleUpdateLocation = async (updatedLocation: Location) => {
-    await updateLocation(updatedLocation);
-  };
-
-  const handleAddCleaner = async (name: string, password: string) => {
-    const targetId = getActiveManagerId();
-    if (targetId) {
-      await addNewCleaner(targetId, name, password);
-    }
-  };
-
-  const handleDeleteCleaner = async (id: string) => {
-    if(confirm(language === 'zh' ? '确定要删除该保洁员吗？' : 'Delete this cleaner?')) {
-      await deleteCleaner(id);
-    }
-  };
-
-  const handleAddLocation = async (nameZh: string, nameEn: string, zone: string, target: number) => {
-    const targetId = getActiveManagerId();
-    if (targetId) {
-        await addNewLocation(targetId, nameZh, nameEn, zone, target);
-    }
-  }
-
-  // UPDATED: Robust logic to handle conditional deletion based on role
-  const handleDeleteLocation = async (id: string) => {
-    // Check cloud mode first
-    if (!isCloudMode) {
-        alert(language === 'zh' ? '系统未连接到数据库，无法执行删除操作。' : 'Cannot delete location: System offline.');
-        return;
-    }
-
-    const loc = locationsList.find(l => l.id === id);
-    if (!loc) {
-        return;
-    }
-
-    try {
-        if (currentUserRole === 'master') {
-            // Master can delete directly
-            if(confirm(language === 'zh' ? '确定要永久删除该点位吗？' : 'Permanently delete this location?')) {
-                await deleteLocation(id);
-            }
-        } else {
-            // Manager must request deletion
-            if(confirm(language === 'zh' 
-                ? '子管理员无法直接删除点位。点击“确定”将向主管理员提交删除申请。' 
-                : 'Managers cannot delete directly. Click OK to request approval from Master Admin.')) {
-                
-                if (currentManager) {
-                    await requestLocationDeletion(id, loc.nameZh, currentManager.id, currentManager.name, currentManager.departmentName);
-                    alert(language === 'zh' ? '申请已提交，等待主管理员审核。' : 'Request sent to Master Admin.');
-                } else {
-                    alert(language === 'zh' ? '错误：未找到当前管理员信息' : 'Error: Manager info missing');
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Delete operation failed:", error);
-        alert(language === 'zh' 
-            ? '操作失败。请检查网络连接或权限设置。' 
-            : 'Operation failed. Please check network or permissions.');
-    }
-  }
-
-  const handleLogCleaning = async (locationId: string) => {
-    if (!currentCleaner) return;
-    const newLog: CleaningLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      locationId,
-      managerId: currentCleaner.managerId, // Tag log with manager ID
-      cleanerId: currentCleaner.id,
-      timestamp: Date.now(),
-      status: 'completed'
-    };
-    await addCleaningLog(newLog);
-  };
-
-  const handleResetData = async () => {
-    const targetId = getActiveManagerId();
-    if (targetId && confirm(t.resetConfirm)) {
-      await clearAllLogs(targetId);
-    }
-  }
-
-  const handleRefreshData = async () => {
-     console.log("Refreshing...");
-  };
-
-  const handleExportData = () => {
-    // Before export, we might want to ensure we have all history.
-    // For now, we export what is loaded.
-    let csvContent = "\uFEFF"; 
-    const headers = language === 'zh' ? "日期,时间,点位名称,区域,保洁员,状态\n" : "Date,Time,Location,Zone,Cleaner,Status\n";
-    csvContent += headers;
-
-    logs.forEach(log => {
-      const dateObj = new Date(log.timestamp);
-      const loc = locationsList.find(l => l.id === log.locationId);
-      const locName = loc ? (language === 'zh' ? loc.nameZh : loc.nameEn) : 'Unknown';
-      const zone = loc ? loc.zone : 'Unknown';
-      const cleaner = cleanersList.find(c => c.id === log.cleanerId);
-      const cleanerName = cleaner ? cleaner.name : 'Unknown';
-      
-      const row = [
-        dateObj.toLocaleDateString(),
-        dateObj.toLocaleTimeString(),
-        `"${locName}"`,
-        `"${zone}"`,
-        `"${cleanerName}"`,
-        log.status
-      ].join(",");
-      csvContent += row + "\n";
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `cleaning_logs_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const toggleLanguage = () => setLanguage(prev => prev === 'en' ? 'zh' : 'en');
-
-  // --- RENDER ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 relative">
+    <div className="min-h-screen bg-gray-50 text-gray-900 pb-20">
       
-      {/* GLOBAL: Language Toggle */}
-      <div className="fixed top-4 right-4 z-[9999] no-print">
-         <button 
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white shadow-md border border-slate-200 text-sm font-medium text-slate-500 hover:text-brand-600 transition-colors"
-          >
-            <Globe size={16} />
-            <span>{language === 'en' ? '中文' : 'En'}</span>
-          </button>
-      </div>
-
-      {/* MAIN VIEW SWITCHER */}
-      {!currentUserRole ? (
-        <LoginScreen 
-          cleaners={cleanersList}
-          managers={managersList}
-          onLogin={handleLogin} 
-          language={language} 
-        />
-      ) : (
-        <>
-          {(currentUserRole === 'manager' || currentUserRole === 'master') && (
-            <nav className="bg-white border-b border-slate-200 sticky top-0 z-40 no-print">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
-                      CT
-                    </div>
-                    <span className="font-bold text-xl tracking-tight text-slate-800 hidden md:block">
-                      {t.appTitle}
-                    </span>
-                    <span className="ml-1 text-[10px] text-white bg-brand-500 px-1.5 py-0.5 rounded-full font-bold">v4.0</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 sm:gap-4">
-                    {/* Role Badge */}
-                    <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-slate-100 text-xs font-bold text-slate-600">
-                        {currentUserRole === 'master' ? <Cloud size={14}/> : <Building2 size={14}/>}
-                        {currentUserRole === 'master' ? 'Master Admin' : currentManager?.departmentName}
-                    </div>
-
-                    <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-
-                    {/* Nav Items */}
-                    <div className="flex bg-slate-100 rounded-lg p-1 hidden sm:flex">
-                      <button
-                        onClick={() => {
-                          setView(currentUserRole === 'master' ? 'master-dashboard' : 'dashboard');
-                          if (currentUserRole === 'master') setMasterSelectedManagerId(null);
-                        }}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                          (view === 'dashboard' || view === 'master-dashboard') ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        <LayoutDashboard size={16} />
-                        <span className="hidden sm:inline">{currentUserRole === 'master' ? 'Admin' : t.manager}</span>
-                      </button>
-                      <button
-                        onClick={() => setView('qr-print')}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                          view === 'qr-print' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        <Printer size={16} />
-                        <span className="hidden sm:inline">{t.qrCodes}</span>
-                      </button>
-                    </div>
-
-                    <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-4 ml-2">
-                      <button 
-                        onClick={handleExportData} 
-                        className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-brand-600 px-2 py-1 hover:bg-slate-50 rounded"
-                        title={t.export}
-                      >
-                        <Download size={14} />
-                        {t.export}
-                      </button>
-                      {(currentUserRole === 'manager' || (currentUserRole === 'master' && masterSelectedManagerId)) && (
-                        <button 
-                            onClick={handleResetData} 
-                            className="flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-red-500 px-2 py-1 hover:bg-red-50 rounded"
-                            title={t.reset}
-                        >
-                            <Trash2 size={14} />
-                            {t.reset}
-                        </button>
-                      )}
-                    </div>
-
-                    <button 
-                      onClick={handleLogout}
-                      className="ml-2 p-2 text-slate-400 hover:text-red-500 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors"
-                      title={t.logout}
-                    >
-                      <LogOut size={20} />
-                    </button>
+      {/* iOS Install Hint Modal */}
+      {showIOSHint && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 relative shadow-2xl animate-in slide-in-from-bottom-10 duration-300">
+            <button 
+              onClick={() => setShowIOSHint(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">安装到 iPhone/iPad</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              iOS 不支持自动安装。请按以下步骤手动添加：
+            </p>
+            <div className="space-y-4 text-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                  <Share className="w-4 h-4 text-blue-600" />
+                </div>
+                <span>1. 点击浏览器底部的 <strong>"分享"</strong> 按钮</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                  <div className="w-4 h-4 border-2 border-gray-400 rounded-sm flex items-center justify-center">
+                    <span className="text-xs font-bold">+</span>
                   </div>
                 </div>
+                <span>2. 向下滑动并选择 <strong>"添加到主屏幕"</strong></span>
               </div>
-            </nav>
-          )}
-
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            
-            {/* MASTER VIEW */}
-            {currentUserRole === 'master' && view === 'master-dashboard' && (
-               <MasterDashboard 
-                  managers={managersList}
-                  onAddManager={handleAddManager}
-                  onUpdateManager={handleUpdateManager}
-                  onDeleteManager={handleDeleteManager}
-                  language={language}
-                  // New Props for Request Handling
-                  deletionRequests={deletionRequests}
-                  onResolveRequest={handleResolveDeletionRequest}
-                  // Props for Dashboard view within Master
-                  selectedManagerId={masterSelectedManagerId}
-                  onSelectManager={setMasterSelectedManagerId}
-                  locations={locationsList}
-                  logs={logs}
-                  cleaners={cleanersList}
-                  onUpdateCleaner={handleUpdateCleaner}
-                  onUpdateLocation={handleUpdateLocation}
-                  onAddCleaner={handleAddCleaner}
-                  onDeleteCleaner={handleDeleteCleaner}
-                  onAddLocation={handleAddLocation}
-                  onDeleteLocation={handleDeleteLocation}
-                  onRefresh={handleRefreshData}
-                  isCloudMode={isCloudMode}
-                  isLoading={isLoading} // PASS LOADING STATE
-                  onLoadHistory={handleLoadFullHistory} // NEW: Load history function
-                  hasLoadedHistory={dataStartTime === 0} // NEW: Flag
-               />
-            )}
-
-            {/* MANAGER DASHBOARD VIEW */}
-            {currentUserRole === 'manager' && view === 'dashboard' && currentManager && (
-              <Dashboard 
-                locations={locationsList} 
-                logs={logs} 
-                cleaners={cleanersList}
-                departmentName={currentManager.departmentName}
-                onUpdateCleaner={handleUpdateCleaner}
-                onUpdateLocation={handleUpdateLocation} 
-                onAddCleaner={handleAddCleaner}
-                onDeleteCleaner={handleDeleteCleaner} 
-                onAddLocation={handleAddLocation}
-                onDeleteLocation={handleDeleteLocation}
-                language={language}
-                onRefresh={handleRefreshData}
-                isCloudMode={isCloudMode}
-                isLoading={isLoading} // PASS LOADING STATE
-                onLoadHistory={handleLoadFullHistory} // NEW: Load history function
-                hasLoadedHistory={dataStartTime === 0} // NEW: Flag
-              />
-            )}
-            
-            {/* PRINT VIEW (Shared) */}
-            {((currentUserRole === 'manager' && view === 'qr-print') || (currentUserRole === 'master' && view === 'qr-print')) && (
-              <QRCodeGenerator locations={locationsList} language={language} />
-            )}
-
-            {/* CLEANER VIEW */}
-            {currentUserRole === 'cleaner' && currentCleaner && (
-              <CleanerInterface 
-                locations={locationsList}
-                currentCleaner={currentCleaner}
-                onLogCleaning={handleLogCleaning}
-                language={language}
-                onLogout={handleLogout}
-              />
-            )}
-          </main>
-        </>
+            </div>
+            <div className="mt-6 text-center">
+              <button 
+                onClick={() => setShowIOSHint(false)}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                我知道了
+              </button>
+            </div>
+            {/* Pointer arrow for Safari bottom bar */}
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 transform sm:hidden"></div>
+          </div>
+        </div>
       )}
+
+      {/* Configuration Warning Banner */}
+      {!isConfigured && showBanner && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3 text-sm text-yellow-800 relative">
+          <div className="flex items-start gap-3 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-yellow-600" />
+            <div className="flex-1 pr-8">
+              <h3 className="font-semibold text-yellow-900">使用本地模式 (Local Mode)</h3>
+              <p className="mt-1 text-yellow-800">
+                未检测到 Firebase 配置，数据保存在本地缓存中。
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowBanner(false)}
+              className="absolute top-2 right-2 p-1.5 text-yellow-700 hover:bg-yellow-100 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+              <MessageSquareText className="w-5 h-5" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-gray-900 truncate hidden sm:block">Riyadh DingTalk Parser</h1>
+            <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium border ${isConfigured ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+               {isConfigured ? <Cloud className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
+               <span className="hidden lg:inline">{isConfigured ? 'Cloud Connected' : 'Local'}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+             {/* Install App Button (Only show if not already installed) */}
+             {!isStandalone && (installPrompt || isIOS) && (
+               <button
+                 onClick={handleInstallClick}
+                 className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors animate-pulse"
+                 title="Install App"
+               >
+                 <Smartphone className="w-4 h-4" />
+                 <span className="hidden sm:inline">Install App</span>
+               </button>
+             )}
+
+             {/* Date Range Filter */}
+             <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+                <div className="relative group flex items-center gap-1">
+                   <span className="text-xs text-gray-400 font-medium hidden sm:block">From</span>
+                   <input 
+                     type="date"
+                     value={startDate}
+                     onChange={(e) => setStartDate(e.target.value)}
+                     className="w-24 sm:w-auto bg-transparent border-none p-0 text-sm text-gray-700 focus:ring-0 font-medium outline-none"
+                   />
+                </div>
+                <span className="mx-1 text-gray-300">|</span>
+                <div className="relative group flex items-center gap-1">
+                   <span className="text-xs text-gray-400 font-medium hidden sm:block">To</span>
+                   <input 
+                     type="date"
+                     value={endDate}
+                     onChange={(e) => setEndDate(e.target.value)}
+                     className="w-24 sm:w-auto bg-transparent border-none p-0 text-sm text-gray-700 focus:ring-0 font-medium outline-none"
+                   />
+                </div>
+                
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    className="ml-1 p-0.5 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+             </div>
+
+             {reports.length > 0 && (
+               <div className="flex items-center gap-1 sm:gap-2 border-l border-gray-200 pl-2 sm:pl-4 ml-1">
+                  <button
+                    onClick={handleExport}
+                    className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    title="Export to Excel"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors hidden sm:block"
+                    title="Clear All History"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+               </div>
+             )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!isFiltered && (
+          <InputSection 
+            onAnalyze={handleAnalyze} 
+            isAnalyzing={status === ParsingStatus.ANALYZING} 
+          />
+        )}
+
+        {errorMsg && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2">
+            <span className="font-semibold">Error:</span> {errorMsg}
+          </div>
+        )}
+
+        {reports.length > 0 && (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <LayoutDashboard className="w-5 h-5 text-gray-500" />
+                <h2 className="text-lg font-semibold text-gray-800">
+                  {isFiltered 
+                    ? `Dashboard (${startDate || 'Start'} - ${endDate || 'Now'})` 
+                    : 'All Time Overview'}
+                </h2>
+              </div>
+              <div className="flex items-center gap-4">
+                {!isFullHistory && !isFiltered && (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-100">
+                    <History className="w-3.5 h-3.5" />
+                    <span>Showing last 14 days</span>
+                  </div>
+                )}
+                <div className="text-sm text-gray-500 hidden sm:block">
+                  Total: {reports.length}
+                </div>
+              </div>
+            </div>
+
+            <Dashboard reports={displayedReports} />
+
+            <div className="flex items-center justify-between mb-4 mt-8">
+               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                 <CalendarIcon className="w-5 h-5 text-gray-500" />
+                 {isFiltered 
+                    ? `Records (${startDate || '...'} to ${endDate || '...'})` 
+                    : 'Historical Records'}
+               </h2>
+               
+               {!isFullHistory && !isFiltered && (
+                 <button 
+                   onClick={() => setIsFullHistory(true)}
+                   className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                 >
+                   Load older history...
+                 </button>
+               )}
+            </div>
+            
+            {displayedReports.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 border-dashed">
+                 <p className="text-gray-500">No records found for this date range.</p>
+                 <button onClick={() => {setStartDate(''); setEndDate('');}} className="mt-2 text-blue-600 hover:underline">Clear Filter</button>
+              </div>
+            ) : (
+              <ReportTable reports={displayedReports} onDelete={handleDelete} />
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 };
+
+function Trash2(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </svg>
+  )
+}
 
 export default App;
